@@ -2489,11 +2489,11 @@ string fvg_tf2   = input.timeframe("60",  "FVG TF 2", inline = "fvt2", group = f
 bool   fvg_show3 = input.bool(true, "Show", inline = "fvt3", group = fvg_gTf)
 string fvg_tf3   = input.timeframe("240", "FVG TF 3", inline = "fvt3", group = fvg_gTf)
 
-string fvg_mitMode = input.string(FVG_MIT_CLOSE, "Mitigation Rule", options = [FVG_MIT_CLOSE, FVG_MIT_WICK, FVG_MIT_FULL], group = fvg_gTf,
+string fvg_mitMode = input.string(FVG_MIT_WICK, "Mitigation Rule", options = [FVG_MIT_CLOSE, FVG_MIT_WICK, FVG_MIT_FULL], group = fvg_gTf,
      tooltip = "Close Inside / Beyond: a chart candle CLOSES inside the gap, or closes through it (judged at candle close by definition).\nAny Wick Touch: any wick enters the gap.\nFull Fill: price trades through the entire gap (wick-based).")
 bool fvg_liveMit = input.bool(true, "Live mitigation (wick / full-fill react on every tick)", group = fvg_gTf,
      tooltip = "ON: with Any Wick Touch or Full Fill, a gap is hidden/frozen the instant price touches it, not when the candle closes. Has no effect on the Close rule.")
-string fvg_mitDisplay = input.string(FVG_MD_DELETE, "Mitigated FVGs", options = [FVG_MD_DELETE, FVG_MD_FADE], group = fvg_gTf,
+string fvg_mitDisplay = input.string(FVG_MD_FADE, "Mitigated FVGs", options = [FVG_MD_DELETE, FVG_MD_FADE], group = fvg_gTf,
      tooltip = "Delete: mitigated gaps disappear.\nFreeze: they stay as a frozen box. They follow the same ATR distance and timeframe toggles as normal FVGs.")
 int fvg_extBars = input.int(15, "Extension Bars (chart bars ahead of price)", minval = 1, maxval = 400, group = fvg_gTf)
 int fvg_maxFvg  = input.int(20, "Max Tracked FVGs (all TFs combined)", minval = 1, maxval = 250, group = fvg_gTf)
@@ -2526,6 +2526,7 @@ var array<box>   fz_box = array.new_box()
 var array<float> fz_top = array.new_float()
 var array<float> fz_bot = array.new_float()
 var array<int>   fz_sec = array.new_int()
+var array<bool>  fz_bull = array.new_bool()
 
 int fvg_barMs = timeframe.in_seconds() * 1000
 int fvg_s1 = timeframe.in_seconds(fvg_tf1)
@@ -2627,17 +2628,28 @@ fvg_addFvg(bool isBull, float gTop, float gBot, int leftTime, string tfTxt, int 
             array.shift(fvg_bull)
             array.shift(fvg_sec)
 
-// Frozen FVGs: same ATR distance + TF toggle + master toggle as live ones
 fvg_updateFrozen() =>
     int n = array.size(fz_box)
     if n > 0
-        for i = 0 to n - 1
-            box b = array.get(fz_box, i)
-            bool vis = fvg_showAll and fvg_tfOn(array.get(fz_sec, i)) and fvg_isNear(array.get(fz_top, i), array.get(fz_bot, i))
-            box.set_bgcolor(b, vis ? fvg_mitCol : color(na))
-            box.set_border_color(b, vis ? color.new(color.gray, 85) : color(na))
-            box.set_text_color(b, vis ? color.new(color.gray, 60) : color(na))
-
+        for i = n - 1 to 0
+            box   b      = array.get(fz_box, i)
+            float gTop   = array.get(fz_top, i)
+            float gBot   = array.get(fz_bot, i)
+            bool  isBull = array.get(fz_bull, i)
+            bool  broken = isBull ? close < gBot : close > gTop
+            if broken
+                box.delete(b)
+                array.remove(fz_box,  i)
+                array.remove(fz_top,  i)
+                array.remove(fz_bot,  i)
+                array.remove(fz_sec,  i)
+                array.remove(fz_bull, i)
+            if not broken
+                bool vis = fvg_showAll and fvg_tfOn(array.get(fz_sec, i)) and fvg_isNear(gTop, gBot)
+                box.set_bgcolor(b, vis ? fvg_mitCol : color(na))
+                box.set_border_color(b, vis ? color.new(color.gray, 85) : color(na))
+                box.set_text_color(b, vis ? color.new(color.gray, 60) : color(na))
+    0
 // Confirmed-bar pass
 fvg_updateAll() =>
     int nF = array.size(fvg_box)
@@ -2653,16 +2665,17 @@ fvg_updateAll() =>
                 if fvg_mitDisplay == FVG_MD_DELETE
                     box.delete(b)
                 else
-                    box.set_right(b, time)
                     array.push(fz_box, b)
                     array.push(fz_top, gTop)
                     array.push(fz_bot, gBot)
                     array.push(fz_sec, gSec)
+                    array.push(fz_bull, isBull)
                     while array.size(fz_box) > 100
                         box.delete(array.shift(fz_box))
                         array.shift(fz_top)
                         array.shift(fz_bot)
                         array.shift(fz_sec)
+                        array.shift(fz_bull)
                 array.remove(fvg_box,  i)
                 array.remove(fvg_top,  i)
                 array.remove(fvg_bot,  i)
