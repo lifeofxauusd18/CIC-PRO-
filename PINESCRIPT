@@ -759,13 +759,13 @@ settings.vi_color := input.color(color.new(color.red, 50), '', inline = 'vi', gr
 // PSP LOGIC SETTINGS
 settings.psp_show := input.bool(true, 'Enable PSP Highlight', group = group_psp_logic)
 settings.psp_sym1_use := input.bool(true, '', inline = 'pspsym1', group = group_psp_logic)
-settings.psp_sym1 := input.symbol('SAXO:XAUUSD', 'Ticker 1', inline = 'pspsym1', group = group_psp_logic)
+settings.psp_sym1 := input.symbol('FOREXCOM:XAUUSD', 'Ticker 1', inline = 'pspsym1', group = group_psp_logic)
 settings.psp_sym2_use := input.bool(true, '', inline = 'pspsym2', group = group_psp_logic)
-settings.psp_sym2 := input.symbol('SAXO:XAGUSD', 'Ticker 2', inline = 'pspsym2', group = group_psp_logic)
+settings.psp_sym2 := input.symbol('FOREXCOM:XAGUSD', 'Ticker 2', inline = 'pspsym2', group = group_psp_logic)
 settings.psp_sym3_use := input.bool(true, '', inline = 'pspsym3', group = group_psp_logic)
-settings.psp_sym3 := input.symbol('SAXO:XAUGBP', 'Ticker 3', inline = 'pspsym3', group = group_psp_logic)
+settings.psp_sym3 := input.symbol('FOREXCOM:XAUGBP', 'Ticker 3', inline = 'pspsym3', group = group_psp_logic)
 settings.psp_sym4_use := input.bool(true, '', inline = 'pspsym4', group = group_psp_logic)
-settings.psp_sym4 := input.symbol('SAXO:XAUEUR', 'Ticker 4', inline = 'pspsym4', group = group_psp_logic)
+settings.psp_sym4 := input.symbol('FOREXCOM:XAUEUR', 'Ticker 4', inline = 'pspsym4', group = group_psp_logic)
 string rawSym1 = settings.psp_sym1
 string rawSym2 = settings.psp_sym2
 string rawSym3 = settings.psp_sym3
@@ -2532,6 +2532,14 @@ int fvg_s1 = timeframe.in_seconds(fvg_tf1)
 int fvg_s2 = timeframe.in_seconds(fvg_tf2)
 int fvg_s3 = timeframe.in_seconds(fvg_tf3)
 
+// true only on the chart bar that closes a candle of that FVG timeframe
+bool fvg_cl1 = not na(time_close(fvg_tf1)) and time_close(fvg_tf1) == time_close
+bool fvg_cl2 = not na(time_close(fvg_tf2)) and time_close(fvg_tf2) == time_close
+bool fvg_cl3 = not na(time_close(fvg_tf3)) and time_close(fvg_tf3) == time_close
+
+fvg_closing(int sec) =>
+    sec == fvg_s1 ? fvg_cl1 : sec == fvg_s2 ? fvg_cl2 : fvg_cl3
+
 float fvg_dAtr = request.security(syminfo.tickerid, "D", ta.atr(14)[1], lookahead = barmerge.lookahead_on)
 
 // ───────────── HELPERS ─────────────
@@ -2560,7 +2568,7 @@ fvg_tfOn(int sec) =>
         on := fvg_show3
     on
 
-fvg_isMitigated(bool isBull, float gTop, float gBot, string mode) =>
+fvg_isMitigated(bool isBull, float gTop, float gBot, string mode, int sec) =>
     bool m = false
     if mode == FVG_MIT_WICK
         m := isBull ? low <= gTop : high >= gBot
@@ -2569,7 +2577,8 @@ fvg_isMitigated(bool isBull, float gTop, float gBot, string mode) =>
     else
         bool inside = close >= gBot and close <= gTop
         bool beyond = isBull ? close < gBot : close > gTop
-        m := inside or beyond
+        // judged only when a candle of the FVG's own timeframe closes
+        m := fvg_closing(sec) and (inside or beyond)
     m
 
 fvg_isNear(float gTop, float gBot) =>
@@ -2639,7 +2648,7 @@ fvg_updateAll() =>
             float gTop   = array.get(fvg_top, i)
             float gBot   = array.get(fvg_bot, i)
             int   gSec   = array.get(fvg_sec, i)
-            bool mit = bar_index > array.get(fvg_bar, i) and fvg_isMitigated(isBull, gTop, gBot, fvg_mitMode)
+            bool mit = bar_index > array.get(fvg_bar, i) and fvg_isMitigated(isBull, gTop, gBot, fvg_mitMode, gSec)
             if mit
                 if fvg_mitDisplay == FVG_MD_DELETE
                     box.delete(b)
@@ -2673,7 +2682,7 @@ fvg_liveTouch() =>
     int nF = array.size(fvg_box)
     if nF > 0
         for i = 0 to nF - 1
-            if bar_index > array.get(fvg_bar, i) and fvg_isMitigated(array.get(fvg_bull, i), array.get(fvg_top, i), array.get(fvg_bot, i), fvg_mitMode)
+            if bar_index > array.get(fvg_bar, i) and fvg_isMitigated(array.get(fvg_bull, i), array.get(fvg_top, i), array.get(fvg_bot, i), fvg_mitMode, array.get(fvg_sec, i))
                 box b = array.get(fvg_box, i)
                 if fvg_mitDisplay == FVG_MD_DELETE
                     box.set_bgcolor(b, color(na))
