@@ -9,22 +9,261 @@ indicator("PO3",
      calc_bars_count = 3000)
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ▼▼▼ SCRIPT 1: CISD Detection Engine ▼▼▼
+// SETTINGS PANEL — numbered sections, one function per section
+//  1 Correlated Assets   2 Direction        3 HTF Candles      4 Features
+//  5 Candle Style        6 CISD             7 Fib Projections  8 SMT
+//  9 Fair Value Gaps    10 HTF Imbalances  11 Fractal         12 Fractal Dashboard
+// 13 XC2                14 Session Opens   15 Reference Style  16 Separators
+// Anything not exposed as an input is a constant you can edit in the code.
 // ═══════════════════════════════════════════════════════════════════════════
 
-string g_general = "1. ⚙️ General"
-string g_cisd = "2. 🔥 CISD Detection"
-string g_cisd_fib = "2.2. 🧪 CISD Fibonacci Projections"
+string g01 = "1. CORRELATED ASSETS ________________"
+string g02 = "2. DIRECTION ________________"
+string g03 = "3. HTF CANDLES ________________"
+string g04 = "4. FEATURES ________________"
+string g05 = "5. CANDLE STYLE ________________"
+string g06 = "6. CISD ________________"
+string g07 = "7. FIBONACCI PROJECTIONS ________________"
+string g08 = "8. SMT ________________"
+string g09 = "9. FAIR VALUE GAPS ________________"
+string g10 = "10. HTF IMBALANCES ________________"
+string g11 = "11. FRACTAL C2 / C3 / C4 ________________"
+string g12 = "12. FRACTAL DASHBOARD ________________"
+string g13 = "13. XC2 ________________"
+string g14 = "14. SESSION OPENS ________________"
+string g15 = "15. REFERENCE STYLE ________________"
+string g16 = "16. SEPARATORS ________________"
 
 color primBullCol = #00a2c7
 color primBearCol = #db5755
 color C_TRANSPARENT = color.new(color.white, 100)
 
+string FVG_MIT_CLOSE = "Close Inside / Beyond"
+string FVG_MIT_WICK  = "Any Wick Touch"
+string FVG_MIT_FULL  = "Full Fill"
+string FVG_MD_DELETE = "Delete"
+string FVG_MD_FADE   = "Freeze"
+
+// ═════════════ 1. CORRELATED ASSETS ═════════════
+bool   autoPairs = input.bool(false, 'Auto Detect Correlated Assets', group = g01, tooltip = "ON: Assets 1-4 are chosen from the chart symbol (NQ -> ES/YM/RTY, Gold -> Silver/XAUEUR/XAUGBP, etc). The symbol boxes are only used if the chart asset isn't recognised or this is OFF. The Use-checkboxes still work as per-slot switches.")
+bool   in_use1 = input.bool(true, 'Use Asset 1', inline = 'as1', group = g01)
+string in_sym1 = input.symbol('FOREXCOM:XAUUSD', '', inline = 'as1', group = g01)
+bool   in_use2 = input.bool(true, 'Use Asset 2', inline = 'as2', group = g01)
+string in_sym2 = input.symbol('FOREXCOM:XAGUSD', '', inline = 'as2', group = g01)
+bool   in_use3 = input.bool(true, 'Use Asset 3', inline = 'as3', group = g01)
+string in_sym3 = input.symbol('FOREXCOM:XAUGBP', '', inline = 'as3', group = g01)
+bool   in_use4 = input.bool(true, 'Use Asset 4', inline = 'as4', group = g01)
+string in_sym4 = input.symbol('FOREXCOM:XAUEUR', '', inline = 'as4', group = g01)
+
+// ═════════════ 2. DIRECTION ═════════════
+string cisd_bias = input.string('Auto', 'Bias Engine (CISD)', options = ['Auto', 'Bullish', 'Bearish'], group = g02)
+string fr_bias   = input.string('Neutral', 'Bias Engine (Fractal)', options = ['Neutral', 'Bullish', 'Bearish'], group = g02)
+
+// ═════════════ 3. HTF CANDLES ═════════════
+bool   htfOn1 = input.bool(true, 'HTF1', inline = 'hs1', group = g03)
+string htfTf1 = input.string('1H', '', options = ['15m','30m','1H','90m','4H','6H','7H','1D','1W'], inline = 'hs1', group = g03)
+int    htfCnt1 = input.int(5, '', minval = 1, maxval = 10, inline = 'hs1', group = g03)
+bool   htfOn2 = input.bool(true, 'HTF2', inline = 'hs2', group = g03)
+string htfTf2 = input.string('90m', '', options = ['15m','30m','1H','90m','4H','6H','7H','1D','1W'], inline = 'hs2', group = g03)
+int    htfCnt2 = input.int(5, '', minval = 1, maxval = 10, inline = 'hs2', group = g03)
+bool   htfOn3 = input.bool(true, 'HTF3', inline = 'hs3', group = g03)
+string htfTf3 = input.string('4H', '', options = ['15m','30m','1H','90m','4H','6H','7H','1D','1W'], inline = 'hs3', group = g03)
+int    htfCnt3 = input.int(5, '', minval = 1, maxval = 10, inline = 'hs3', group = g03)
+int in_offset    = input.int(50, 'Padding from chart', minval = 1, group = g03)
+int in_width     = input.int(2, 'Candle width', minval = 1, maxval = 4, group = g03)
+int in_buffer    = input.int(1, 'Space between candles', minval = 1, maxval = 4, group = g03)
+int in_htfBuffer = input.int(5, 'Space between HTFs', minval = 1, maxval = 10, group = g03)
+
+// ═════════════ 4. FEATURES (toggle + colors on one row) ═════════════
+bool  fvg_showAll    = input.bool(true, 'Enable FVG?', inline = 'ft1', group = g04)
+color fvg_bullCol    = input.color(color.new(color.teal, 85), '', inline = 'ft1', group = g04)
+color fvg_bearCol    = input.color(color.new(color.red, 85), '', inline = 'ft1', group = g04)
+bool  smtEnable      = input.bool(true, 'Enable SMT?', inline = 'ft2', group = g04)
+color cleanSMTColor  = input.color(#555555, '', inline = 'ft2', group = g04)
+bool  pspShow        = input.bool(true, 'Enable PSP?', inline = 'ft3', group = g04)
+color in_pspUp       = input.color(#00ADEF, '', inline = 'ft3', group = g04)
+color in_pspDown     = input.color(#DB5755, '', inline = 'ft3', group = g04)
+bool  smtHTFLines    = input.bool(true, 'HTF SMT', group = g04, tooltip = "SMT lines inside the HTF candle panel")
+bool  smtChartLines  = input.bool(true, 'Chart SMT', group = g04, tooltip = "Long divergence lines drawn on the main chart bars")
+
+// ═════════════ 5. CANDLE STYLE ═════════════
+color  in_bullBody   = input.color(color.new(#ffffff, 10), 'Body', inline = 'cs1', group = g05)
+color  in_bearBody   = input.color(color.new(#000000, 53), '', inline = 'cs1', group = g05)
+color  in_bullBorder = input.color(#000000, 'Border', inline = 'cs2', group = g05)
+color  in_bearBorder = input.color(#000000, '', inline = 'cs2', group = g05)
+color  in_bullWick   = input.color(#000000, 'Wick', inline = 'cs3', group = g05)
+color  in_bearWick   = input.color(#000000, '', inline = 'cs3', group = g05)
+bool   in_sweepOn    = input.bool(true, 'Sweeps', inline = 'cs4', group = g05)
+color  in_sweepCol   = input.color(#9c9c9c, '', inline = 'cs4', group = g05)
+bool   in_htfLblOn   = input.bool(true, 'HTF Label', inline = 'cs5', group = g05)
+color  in_lblColor   = input.color(color.black, '', inline = 'cs5', group = g05)
+string in_lblSize    = input.string(size.small, '', [size.tiny, size.small, size.normal, size.large, size.huge], inline = 'cs5', group = g05)
+bool   in_tmrOn      = input.bool(true, 'Remaining Time', inline = 'cs6', group = g05)
+color  in_tmrColor   = input.color(color.black, '', inline = 'cs6', group = g05)
+string in_tmrSize    = input.string(size.tiny, '', [size.tiny, size.small, size.normal, size.large, size.huge], inline = 'cs6', group = g05)
+string in_lblPos     = input.string('Top', 'Label Position', options = ['Top', 'Bottom', 'Both'], group = g05)
+string in_lblAlign   = input.string('Follow Candles', 'Label Alignment', options = ['Follow Candles', 'Align'], group = g05)
+
+// ═════════════ 6. CISD ═════════════
+bool   inp_cisd_show   = input.bool(false, 'Show CISD', inline = 'ci1', group = g06)
+color  cisd_color_bull = input.color(primBullCol, '', inline = 'ci1', group = g06)
+color  cisd_color_bear = input.color(primBearCol, '', inline = 'ci1', group = g06)
+int    cisd_offset     = input.int(2, 'Extend Bars', minval = 0, maxval = 20, inline = 'ci1', group = g06)
+bool   cisd_purge_filter    = input.bool(false, 'Filter by Purge', inline = 'ci2', group = g06)
+int    cisd_purge_tolerance = input.int(5, '', minval = 1, maxval = 50, inline = 'ci2', group = g06)
+bool   cisd_size_filter = input.bool(true, 'Size Filter', inline = 'ci3', group = g06)
+string cisd_size_preset = input.string('Regular', '', options = ['Really small', 'Small', 'Regular', 'Sizeable', 'Juicy'], inline = 'ci3', group = g06)
+
+// ═════════════ 7. FIBONACCI PROJECTIONS ═════════════
+bool   cisd_fib_show_raw = input.bool(false, 'Show Fibonacci Projections', group = g07)
+int    cisd_fib_min_minutes = input.int(120, 'Minimum Minutes Between Projections', minval = 0, group = g07, tooltip = "Only applies on charts below 1H.")
+bool   cisd_fib_prop     = input.bool(false, 'Include Propulsion Setups', group = g07)
+string cisd_fib_mode     = input.string('Body', 'Calculate From', options = ['Body', 'Wick'], group = g07)
+int    cisd_fib_max      = input.int(5, 'Max Fibs Per Direction', minval = 1, maxval = 10, group = g07)
+
+color cisd_fib_n05_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fb1', group = g07)
+bool  cisd_fib_n05       = input.bool(false, '-0.5', inline = 'fb1', group = g07)
+color cisd_fib_n10_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fb1', group = g07)
+bool  cisd_fib_n10       = input.bool(false, '-1', inline = 'fb1', group = g07)
+color cisd_fib_n15_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fb1', group = g07)
+bool  cisd_fib_n15       = input.bool(false, '-1.5', inline = 'fb1', group = g07)
+color cisd_fib_n20_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fb2', group = g07)
+bool  cisd_fib_n20       = input.bool(true, '-2', inline = 'fb2', group = g07)
+color cisd_fib_n25_color = input.color(color.new(primBearCol, 0), '', inline = 'fb2', group = g07)
+bool  cisd_fib_n25       = input.bool(true, '-2.5', inline = 'fb2', group = g07)
+color cisd_fib_n30_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fb2', group = g07)
+bool  cisd_fib_n30       = input.bool(false, '-3', inline = 'fb2', group = g07)
+color cisd_fib_n35_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fb3', group = g07)
+bool  cisd_fib_n35       = input.bool(false, '-3.5', inline = 'fb3', group = g07)
+color cisd_fib_n40_color = input.color(color.new(primBearCol, 0), '', inline = 'fb3', group = g07)
+bool  cisd_fib_n40       = input.bool(true, '-4', inline = 'fb3', group = g07)
+color cisd_fib_n45_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fb3', group = g07)
+bool  cisd_fib_n45       = input.bool(true, '-4.5', inline = 'fb3', group = g07)
+
+// ═════════════ 8. SMT ═════════════
+int    div_line_width = input.int(1, 'SMT Line Width', minval = 1, maxval = 3, group = g08)
+string div_line_style = input.string("Solid", 'SMT Line Style', options = ["Solid", "Dashed", "Dotted"], group = g08)
+bool   smt_label_show = input.bool(false, 'Show Ticker Names on SMT Label', group = g08)
+color  smt_text_col   = input.color(color.black, 'SMT Text Color', group = g08)
+// SMT per-timeframe on/off
+bool   smt_en_15m = input.bool(true, '15m', inline = 'st1', group = g08)
+bool   smt_en_30m = input.bool(true, '30m', inline = 'st1', group = g08)
+bool   smt_en_1h  = input.bool(true, '1H',  inline = 'st1', group = g08)
+bool   smt_en_90m = input.bool(true, '90m', inline = 'st2', group = g08)
+bool   smt_en_4h  = input.bool(true, '4H',  inline = 'st2', group = g08)
+bool   smt_en_6h  = input.bool(true, '6H',  inline = 'st2', group = g08)
+bool   smt_en_7h  = input.bool(true, '7H',  inline = 'st3', group = g08)
+bool   smt_en_1d  = input.bool(true, '1D',  inline = 'st3', group = g08)
+bool   smt_en_1w  = input.bool(true, '1W',  inline = 'st3', group = g08)
+
+// ═════════════ 9. FAIR VALUE GAPS ═════════════
+bool   fvg_show1 = input.bool(false, 'FVG TF 1', inline = 'fv1', group = g09)
+string fvg_tf1   = input.timeframe("30", '', inline = 'fv1', group = g09)
+bool   fvg_show2 = input.bool(true, 'FVG TF 2', inline = 'fv2', group = g09)
+string fvg_tf2   = input.timeframe("60", '', inline = 'fv2', group = g09)
+bool   fvg_show3 = input.bool(true, 'FVG TF 3', inline = 'fv3', group = g09)
+string fvg_tf3   = input.timeframe("240", '', inline = 'fv3', group = g09)
+string fvg_mitMode    = input.string(FVG_MIT_WICK, 'Mitigation Rule', options = [FVG_MIT_CLOSE, FVG_MIT_WICK, FVG_MIT_FULL], group = g09)
+bool   fvg_liveMit    = input.bool(true, 'Live Mitigation', group = g09, tooltip = "ON: with Any Wick Touch or Full Fill, a gap is hidden/frozen the instant price touches it, not when the candle closes.")
+string fvg_mitDisplay = input.string(FVG_MD_FADE, 'Mitigated FVGs', options = [FVG_MD_DELETE, FVG_MD_FADE], group = g09)
+color  fvg_mitCol     = input.color(color.new(color.gray, 92), 'Mitigated Color', group = g09)
+float  fvg_maxDistAtr = input.float(1.5, 'Max Distance (x daily ATR, 0 = off)', minval = 0.0, step = 0.25, group = g09)
+float  fvg_minGapAtr  = input.float(0.02, 'Min Gap Size (x daily ATR)', minval = 0.0, step = 0.01, group = g09)
+bool   fvg_noOverlap  = input.bool(true, 'Skip Overlapping FVGs', group = g09)
+int    fvg_extBars    = input.int(15, 'Extension Bars', minval = 1, maxval = 400, group = g09)
+int    fvg_maxFvg     = input.int(20, 'Max Tracked FVGs', minval = 1, maxval = 250, group = g09)
+int    fvg_borderTr   = input.int(70, 'Border Transparency', minval = 0, maxval = 100, group = g09)
+bool   fvg_showLabel  = input.bool(true, 'FVG Label', inline = 'fv4', group = g09)
+string fvg_lblSize    = input.string(size.small, '', options = [size.tiny, size.small, size.normal], inline = 'fv4', group = g09)
+int    fvg_lblTransp  = input.int(0, 'Label Transparency', minval = 0, maxval = 100, group = g09)
+
+// ═════════════ 10. HTF IMBALANCES ═════════════
+bool  in_htfFvgOn  = input.bool(true, 'HTF FVG', inline = 'hi1', group = g10)
+color in_htfFvgCol = input.color(color.new(color.gray, 80), '', inline = 'hi1', group = g10)
+bool  in_htfViOn   = input.bool(true, 'HTF Volume Imbalance', inline = 'hi2', group = g10)
+color in_htfViCol  = input.color(color.new(color.red, 50), '', inline = 'hi2', group = g10)
+
+// ═════════════ 11. FRACTAL ═════════════
+bool   fr_show    = input.bool(false, 'Show Fractal C2/C3/C4', group = g11)
+string fr_model   = input.string('Auto', 'Fractal', options = ['Custom', 'Auto', '1m-15m', '3m-30m', '5m-1H', '15m-4H', '1H-1D', '4H-1W', '1D-1W'], group = g11)
+string fr_cLTF    = input.timeframe('5', 'Custom LTF / HTF', inline = 'fr1', group = g11)
+string fr_cHTF    = input.timeframe('60', '', inline = 'fr1', group = g11)
+int    fr_hist    = input.int(1, 'History (0 = unlimited)', minval = 0, maxval = 40, group = g11)
+bool   fr_showLbl = input.bool(true, 'Labels', group = g11)
+bool   fr_showT   = input.bool(true, 'T-Spot Box', inline = 'fr2', group = g11)
+color  fr_bullBox = input.color(color.new(color.green, 80), '', inline = 'fr2', group = g11)
+color  fr_bearBox = input.color(color.new(color.gray, 80), '', inline = 'fr2', group = g11)
+bool   fr_showDashL = input.bool(true, 'C3/C4 Dash', inline = 'fr3', group = g11)
+color  fr_dashCol = input.color(color.black, '', inline = 'fr3', group = g11)
+bool   fr_alerts  = input.bool(true, 'Alerts on C2', group = g11)
+
+// ═════════════ 12. FRACTAL DASHBOARD ═════════════
+bool   fr_showTbl = input.bool(true, 'Show Dashboard', group = g12)
+string fr_tblV    = input.string('Top', 'Position', options = ['Top', 'Middle', 'Bottom'], inline = 'fd1', group = g12)
+string fr_tblH    = input.string('Right', '', options = ['Left', 'Center', 'Right'], inline = 'fd1', group = g12)
+color  fr_tblText = input.color(color.new(#131722, 0), 'Text', inline = 'fd2', group = g12)
+color  fr_tblBg   = input.color(color.new(#ffffff, 0), 'Background', inline = 'fd2', group = g12)
+
+// ═════════════ 13. XC2 ═════════════
+bool   hideRC           = input.bool(false, 'Hide XC2', group = g13)
+bool   requireColors    = input.bool(false, 'Require Opposite C1/C2 Colors', group = g13)
+bool   requireCloseBack = input.bool(true, 'Require C2 Close Back Inside', group = g13)
+int    maxMarks         = input.int(100, 'Recent XC2 Markings', minval = 2, maxval = 200, group = g13)
+color  rcColor          = input.color(color.black, 'Line Color / Width', inline = 'xc1', group = g13)
+int    rcWidth          = input.int(1, '', minval = 1, maxval = 5, inline = 'xc1', group = g13)
+string rcStyleInput     = input.string("Solid", 'Line Style', options = ["Solid", "Dotted", "Dashed"], group = g13)
+bool   showLabels       = input.bool(true, 'Show XC2 Labels', inline = 'xc2', group = g13)
+color  labelColor       = input.color(color.black, '', inline = 'xc2', group = g13)
+string labelSizeInput   = input.string("Small", '', options = ["Tiny", "Small", "Normal", "Large"], inline = 'xc2', group = g13)
+
+// ═════════════ 14. SESSION OPENS ═════════════
+bool showWO  = input.bool(true, 'Show W.O (Sun 18:00)', group = g14)
+bool showDO  = input.bool(true, 'Show D.O (18:00)', group = g14)
+bool showMID = input.bool(true, 'Show Midnight (00:00)', group = g14)
+bool showNY  = input.bool(true, 'Show NY Open (9:30)', group = g14)
+bool showTEN = input.bool(true, 'Show NY Ref (10:00)', group = g14)
+bool showLvlLabels = input.bool(true, 'Show Labels', group = g14)
+bool showPrior     = input.bool(false, 'Show Previous Levels', group = g14)
+bool labelWO  = showLvlLabels
+bool labelDO  = showLvlLabels
+bool labelMID = showLvlLabels
+bool labelNY  = showLvlLabels
+bool labelTEN = showLvlLabels
+
+// ═════════════ 15. REFERENCE STYLE ═════════════
+color  lineColor    = input.color(color.rgb(120, 123, 134), 'Line Color', group = g15)
+string lineStyle    = input.string("Dotted", 'Line Style', options = ["Solid", "Dashed", "Dotted"], inline = 'rs1', group = g15)
+int    lineWidth    = input.int(1, 'Width', minval = 1, maxval = 5, inline = 'rs1', group = g15)
+color  lvlTextColor = input.color(color.rgb(120, 123, 134), 'Text Color', inline = 'rs2', group = g15)
+string lvlTextSize  = input.string(size.small, 'Text Size', options = [size.tiny, size.small, size.normal], inline = 'rs2', group = g15)
+
+// ═════════════ 16. SEPARATORS ═════════════
+bool   in_sepShow    = input.bool(true, 'HTF Separators', inline = 'sp1', group = g16)
+color  in_htfSepCol  = input.color(color.gray, '', inline = 'sp1', group = g16)
+bool   enableChartSeparators = input.bool(false, 'Chart Separators', inline = 'sp2', group = g16)
+string sepSelection  = input.string("Auto", '', options = ["Auto", "15m", "30m", "1H", "4H", "1D", "1W"], inline = 'sp2', group = g16)
+int    sepLookback   = input.int(150, 'Lookback Bars', minval = 20, maxval = 500, group = g16)
+bool   sepShowLabel  = input.bool(true, 'Show Timestamp', group = g16)
+color  sepColor      = input.color(color.new(#787b86, 70), 'Line / Text Color', inline = 'sp3', group = g16)
+color  sepTextColor  = input.color(#787b86, '', inline = 'sp3', group = g16)
+int    sepWidth      = input.int(1, 'Line Width', minval = 1, maxval = 5, group = g16)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ▼▼▼ SCRIPT 1: CISD Detection Engine ▼▼▼
+// ═══════════════════════════════════════════════════════════════════════════
+
 const bool CISD_FIB_ENGINE = true
-const int CISD_FIB_MIN_SPACING_MS = 2 * 60 * 60 * 1000
+int CISD_FIB_MIN_SPACING_MS = cisd_fib_min_minutes * 60 * 1000
 int pivot_len = 1
 bool pivot_delete_on_cross = true
 bool cisd_invalidate_on_cross = true
+
+// CISD constants (edit here if needed)
+string cisd_sensitivity     = 'Standard'
+int    cisd_pending_timeout = cisd_sensitivity == 'Standard' ? 10 : 20
+bool   cisd_exhaustive      = false
+
+
 
 type CISDStretch
     bool bullish
@@ -177,41 +416,6 @@ enforceFibMax(maxPerDirection) =>
     while countFibProjections(false) > maxPerDirection
         if not removeOldestFibForDir(false)
             break
-
-string cisd_bias = input.string('Auto', '🔥 CISD Directional Bias', options = ['Auto', 'Bullish', 'Bearish'], group = g_general)
-bool inp_cisd_show = input.bool(false, '🔥 Show CISD ', inline = 'cisd_main', group = g_cisd)
-color cisd_color_bull = input.color(color.new(primBullCol, 0), '', inline = 'cisd_main', group = g_cisd, active = inp_cisd_show)
-color cisd_color_bear = input.color(color.new(primBearCol, 0), '', inline = 'cisd_main', group = g_cisd, active = inp_cisd_show)
-int cisd_offset = input.int(2, '', minval = 0, maxval = 20, inline = 'cisd_main', group = g_cisd, active = inp_cisd_show)
-string cisd_sensitivity = input.string('Standard', 'CISD Sensitivity', options = ['Standard', 'Max'], group = g_cisd, active = inp_cisd_show)
-int cisd_pending_timeout = cisd_sensitivity == 'Standard' ? 10 : 20
-bool cisd_size_filter = input.bool(true, 'CISD Size Filter', inline = 'cisd_size', group = g_cisd, active = inp_cisd_show)
-string cisd_size_preset = input.string('Regular', '', options = ['Really small', 'Small', 'Regular', 'Sizeable', 'Juicy'], inline = 'cisd_size', group = g_cisd, active = inp_cisd_show and cisd_size_filter)
-bool cisd_exhaustive = input.bool(false, 'Show All Historical CISD?', group = g_cisd, active = inp_cisd_show)
-bool cisd_purge_filter = input.bool(false, 'Filter by Purge', inline = 'cisd_purge', group = g_cisd, active = inp_cisd_show)
-int cisd_purge_tolerance = input.int(5, '', minval = 1, maxval = 50, inline = 'cisd_purge', group = g_cisd, active = inp_cisd_show and cisd_purge_filter)
-bool cisd_fib_show_raw = input.bool(false, '🧪 Show Fibonacci Projections', group = g_cisd_fib, active = inp_cisd_show)
-string cisd_fib_mode = input.string('Body', 'Calculate From', options = ['Body', 'Wick'], group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-int cisd_fib_max = input.int(5, 'Max Fibs Per Direction', minval = 1, maxval = 10, group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-
-color cisd_fib_n05_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fib_n05', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-bool cisd_fib_n05 = input.bool(false, '-0.5', inline = 'fib_n05', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-color cisd_fib_n10_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fib_n05', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-bool cisd_fib_n10 = input.bool(false, '-1 ', inline = 'fib_n05', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-color cisd_fib_n15_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fib_n05', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-bool cisd_fib_n15 = input.bool(false, '-1.5', inline = 'fib_n05', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-color cisd_fib_n20_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fib_n20', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-bool cisd_fib_n20 = input.bool(true, '-2 ', inline = 'fib_n20', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-color cisd_fib_n25_color = input.color(color.new(primBearCol, 0), '', inline = 'fib_n20', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-bool cisd_fib_n25 = input.bool(true, '-2.5 ', inline = 'fib_n20', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-color cisd_fib_n30_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fib_n20', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-bool cisd_fib_n30 = input.bool(false, '-3 ', inline = 'fib_n20', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-color cisd_fib_n35_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fib_n35', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-bool cisd_fib_n35 = input.bool(false, '-3.5', inline = 'fib_n35', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-color cisd_fib_n40_color = input.color(color.new(primBearCol, 0), '', inline = 'fib_n35', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-bool cisd_fib_n40 = input.bool(true, '-4 ', inline = 'fib_n35', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-color cisd_fib_n45_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fib_n35', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
-bool cisd_fib_n45 = input.bool(true, '-4.5 ', inline = 'fib_n35', group = g_cisd_fib, active = inp_cisd_show and cisd_fib_show_raw)
 
 bool cisd_fib_show = CISD_FIB_ENGINE and cisd_fib_show_raw
 var bool BIAS_BEAR = cisd_bias == 'Auto' or cisd_bias == 'Bearish'
@@ -452,7 +656,7 @@ if inp_cisd_show and bool(pivotLow) and BIAS_BULL
                     line.delete(it.pending_line)
                     array.remove(pending_cisd, ii)
         lnB = line.new(origin_bar_b, lvlB, bar_index, lvlB, color = cisd_color_bull, style = line.style_dotted, width = 1)
-        stB = CISDStretch.new(true, origin_bar_b, lvlB, end_bar_b, endClsB, origHB, origLB, runExtOffB, runExtPxB)
+        stB = CISDStretch.new(true, origin_bar_b, lvlB, end_bar_b, endClsB, origHB, origLB, run_ext_bar_b, runExtPxB)
         array.push(pending_cisd, PendingCISD.new(stB, pivot_bar_b, bar_index, lnB))
 
 if inp_cisd_show and array.size(pending_cisd) > 0
@@ -488,7 +692,7 @@ if inp_cisd_show and array.size(pending_cisd) > 0
             float pivotPriceForCISD = p.stretch.bullish ? low[bar_index - p.pivot_bar] : high[bar_index - p.pivot_bar]
             ci = ConfirmedCISD.new(p.stretch, p.pivot_bar, pivotPriceForCISD, bar_index, ln_c, shp)
             array.push(confirmed_cisd, ci)
-            if cisd_fib_show and not isProp
+            if cisd_fib_show and (cisd_fib_prop or not isProp)
                 bool fib_spacing_ok = true
                 if timeframe.in_seconds() < 3600
                     int lastFibTime = mostRecentFibTime(p.stretch.bullish)
@@ -673,99 +877,98 @@ htf3.settings := SettingsHTF3
 htf3.candles := candles_3
 htf3.imbalances := imbalances_3
 
-string group_htf = "HTF Input Settings ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-string group_style = "Styling ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-string group_label = "Label Settings ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-string group_imbalance = "Imbalance ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-string group_psp_logic = "PSP Logic ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-string group_sweep = "HTF Sweep ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-string group_separator = "Separator ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-string g_div = "3. 🔥 DIVERGENCES"
-
 settings.auto_htf := false
 settings.auto_count := false
-bool gxtShow1 = input.bool(false, 'HTF 1 (15 MIN)', inline = 'gxt1', group = group_htf)
-int gxtNum1 = input.int(6, '', inline = 'gxt1', minval = 1, maxval = 10, group = group_htf)
-bool gxtShow2 = input.bool(false, 'HTF 2 (30 MIN)', inline = 'gxt2', group = group_htf)
-int gxtNum2 = input.int(6, '', inline = 'gxt2', minval = 1, maxval = 10, group = group_htf)
-bool gxtShow3 = input.bool(true, 'HTF 3 (1 HOUR)', inline = 'gxt3', group = group_htf)
-int gxtNum3 = input.int(5, '', inline = 'gxt3', minval = 1, maxval = 10, group = group_htf)
-bool gxtShow4 = input.bool(true, 'HTF 4 (1.5 HOUR)', inline = 'gxt4', group = group_htf)
-int gxtNum4 = input.int(5, '', inline = 'gxt4', minval = 1, maxval = 10, group = group_htf)
-bool gxtShow5 = input.bool(true, 'HTF 5 (4 HOUR)', inline = 'gxt5', group = group_htf)
-int gxtNum5 = input.int(5, '', inline = 'gxt5', minval = 1, maxval = 10, group = group_htf)
-bool gxtShow6 = input.bool(true, 'HTF 6 (6 HOUR)', inline = 'gxt6', group = group_htf)
-int gxtNum6 = input.int(5, '', inline = 'gxt6', minval = 1, maxval = 10, group = group_htf)
-bool gxtShow7 = input.bool(true, 'HTF 7 (7 HOUR)', inline = 'gxt7', group = group_htf)
-int gxtNum7 = input.int(5, '', inline = 'gxt7', minval = 1, maxval = 10, group = group_htf)
-bool gxtShow8 = input.bool(false, 'HTF 8 (DAILY)', inline = 'gxt8', group = group_htf)
-int gxtNum8 = input.int(1, '', inline = 'gxt8', minval = 1, maxval = 10, group = group_htf)
-bool gxtShow9 = input.bool(false, 'HTF 9 (WEEKLY)', inline = 'gxt9', group = group_htf)
-int gxtNum9 = input.int(1, '', inline = 'gxt9', minval = 1, maxval = 10, group = group_htf)
 
-string[] panelTf = array.new_string(9)
-bool[] panelOn = array.new_bool(9)
-int[] panelCnt = array.new_int(9)
-panelTf.set(0, '15'), panelOn.set(0, gxtShow1), panelCnt.set(0, gxtNum1)
-panelTf.set(1, '30'), panelOn.set(1, gxtShow2), panelCnt.set(1, gxtNum2)
-panelTf.set(2, '60'), panelOn.set(2, gxtShow3), panelCnt.set(2, gxtNum3)
-panelTf.set(3, '90'), panelOn.set(3, gxtShow4), panelCnt.set(3, gxtNum4)
-panelTf.set(4, '240'), panelOn.set(4, gxtShow5), panelCnt.set(4, gxtNum5)
-panelTf.set(5, '360'), panelOn.set(5, gxtShow6), panelCnt.set(5, gxtNum6)
-panelTf.set(6, '420'), panelOn.set(6, gxtShow7), panelCnt.set(6, gxtNum7)
-panelTf.set(7, 'D'), panelOn.set(7, gxtShow8), panelCnt.set(7, gxtNum8)
-panelTf.set(8, 'W'), panelOn.set(8, gxtShow9), panelCnt.set(8, gxtNum9)
+// ─────────── HTF slot mapping (from the Quick Settings dropdowns) ───────────
+f_tfMap(string s) =>
+    switch s
+        '15m' => '15'
+        '30m' => '30'
+        '1H'  => '60'
+        '90m' => '90'
+        '4H'  => '240'
+        '6H'  => '360'
+        '7H'  => '420'
+        '1D'  => 'D'
+        '1W'  => 'W'
+        =>       '60'
 
-string htf_1 = '90', string htf_2 = '360', string htf_3 = '420'
-int maxDisp1 = 6, int maxDisp2 = 6, int maxDisp3 = 6
-htf1.settings.show := false, htf2.settings.show := false, htf3.settings.show := false
+string htf_1 = f_tfMap(htfTf1)
+string htf_2 = f_tfMap(htfTf2)
+string htf_3 = f_tfMap(htfTf3)
+int maxDisp1 = htfCnt1
+int maxDisp2 = htfCnt2
+int maxDisp3 = htfCnt3
+htf1.settings.show := htfOn1
+htf2.settings.show := htfOn2
+htf3.settings.show := htfOn3
 
-int fill = 0
-for k = 0 to 8
-    if fill < 3 and panelOn.get(k)
-        if fill == 0
-            htf1.settings.show := true, htf_1 := panelTf.get(k), maxDisp1 := panelCnt.get(k)
-        else if fill == 1
-            htf2.settings.show := true, htf_2 := panelTf.get(k), maxDisp2 := panelCnt.get(k)
-        else
-            htf3.settings.show := true, htf_3 := panelTf.get(k), maxDisp3 := panelCnt.get(k)
-        fill += 1
+// ═══════════════════════════════════════════════════════════════════════════
+// 🎨 AESTHETICS (part 2: settings-bound)
+// ═══════════════════════════════════════════════════════════════════════════
 
-// HTF CANDLE COLORS
-settings.bull_body := input.color(color.new(#ffffff, 10), 'Bull Body ', inline = 'body', group=group_style)
-settings.bear_body := input.color(color.new(#000000, 53), '', inline = 'body', group=group_style)
-settings.bull_border := input.color(#000000, 'Borders', inline = 'borders', group=group_style)
-settings.bear_border := input.color(#000000, '', inline = 'borders', group=group_style)
-settings.bull_wick := input.color(#000000, 'Wick ', inline = 'wick', group=group_style)
-settings.bear_wick := input.color(#000000, '', inline = 'wick', group=group_style)
+// HTF look (inputs live in section ①)
+settings.bull_body     := in_bullBody
+settings.bear_body     := in_bearBody
+settings.bull_border   := in_bullBorder
+settings.bear_border   := in_bearBorder
+settings.bull_wick     := in_bullWick
+settings.bear_wick     := in_bearWick
+settings.psp_up_body   := in_pspUp
+settings.psp_down_body := in_pspDown
+settings.offset        := in_offset
+settings.width         := in_width * 2
+settings.buffer        := in_buffer
+settings.htf_buffer    := in_htfBuffer
+settings.htf_label_color := in_lblColor
+settings.htf_label_size  := in_lblSize
+settings.htf_timer_color := in_tmrColor
+settings.htf_timer_size  := in_tmrSize
+settings.fvg_color     := in_htfFvgCol
+settings.vi_color      := in_htfViCol
+settings.sweep_color   := in_sweepCol
+settings.sep_color     := in_htfSepCol
+settings.htf_label_show  := in_htfLblOn
+settings.htf_timer_show  := in_tmrOn
+settings.label_position  := in_lblPos
+settings.label_alignment := in_lblAlign
+settings.sweep_show      := in_sweepOn
+settings.fvg_show        := in_htfFvgOn
+settings.vi_show         := in_htfViOn
+settings.show_sep        := in_sepShow
+settings.smt_label_show  := smt_label_show
 
-settings.offset := input.int(50, 'padding from current candles', minval = 1, group=group_style)
-settings.buffer := input.int(1, 'space between candles', minval = 1, maxval = 4, group=group_style)
-settings.htf_buffer := input.int(5, 'space between Higher Timeframes', minval = 1, maxval = 10, group=group_style)
-settings.width := input.int(2, 'Candle Width', minval = 1, maxval = 4, group=group_style) * 2
-settings.htf_label_show := input.bool(true, 'HTF Label ', group=group_label, inline = 'HTFlabel')
-settings.htf_label_color := input.color(color.black, '', group=group_label, inline = 'HTFlabel')
-settings.htf_label_size := input.string(size.small, '', [size.tiny, size.small, size.normal, size.large, size.huge], group=group_label, inline = 'HTFlabel')
-settings.label_position := input.string("Top", 'Label Positions', options=['Both', 'Top', 'Bottom'], group=group_label)
-settings.label_alignment := input.string("Follow Candles", "Label Alignment", options=['Align', 'Follow Candles'], group=group_label)
-settings.htf_timer_show := input.bool(true, 'Remaining time ', inline = 'timer', group=group_label)
-settings.htf_timer_color := input.color(color.black, '', inline = 'timer', group=group_label)
-settings.htf_timer_size := input.string(size.tiny, '', [size.tiny, size.small, size.normal, size.large, size.huge], group=group_label, inline = 'timer')
-settings.fvg_show := input.bool(true, 'Fair Value Gap ', group = group_imbalance, inline = 'fvg')
-settings.fvg_color := input.color(color.new(color.gray, 80), '', inline = 'fvg', group = group_imbalance)
-settings.vi_show := input.bool(true, 'Volume Imbalance', group = group_imbalance, inline = 'vi')
-settings.vi_color := input.color(color.new(color.red, 50), '', inline = 'vi', group = group_imbalance)
+// ─────────── Constants for HTF look & feel ───────────
+settings.psp_up_border := #000000
+settings.psp_down_border := #000000
+settings.psp_up_wick := #000000
+settings.psp_down_wick := #000000
+settings.smt_show := true
+settings.smt_color := color.new(#ff9800, 0)
+settings.smt_show_sym1 := true
+settings.smt_show_sym2 := true
+settings.smt_show_sym3 := true
+settings.sep_style := "Dotted"
+settings.sep_width := 1
+settings.sep_tf := "30"
 
-// PSP LOGIC SETTINGS
-settings.psp_show := input.bool(true, 'Enable PSP Highlight', group = group_psp_logic)
-settings.psp_sym1_use := input.bool(true, '', inline = 'pspsym1', group = group_psp_logic)
-settings.psp_sym1 := input.symbol('FOREXCOM:XAUUSD', 'Ticker 1', inline = 'pspsym1', group = group_psp_logic)
-settings.psp_sym2_use := input.bool(true, '', inline = 'pspsym2', group = group_psp_logic)
-settings.psp_sym2 := input.symbol('FOREXCOM:XAGUSD', 'Ticker 2', inline = 'pspsym2', group = group_psp_logic)
-settings.psp_sym3_use := input.bool(true, '', inline = 'pspsym3', group = group_psp_logic)
-settings.psp_sym3 := input.symbol('FOREXCOM:XAUGBP', 'Ticker 3', inline = 'pspsym3', group = group_psp_logic)
-settings.psp_sym4_use := input.bool(true, '', inline = 'pspsym4', group = group_psp_logic)
-settings.psp_sym4 := input.symbol('FOREXCOM:XAUEUR', 'Ticker 4', inline = 'pspsym4', group = group_psp_logic)
+// ─────────── SMT / PSP (Quick Settings) ───────────
+settings.enableSMT    := smtEnable
+settings.showHTFSMT   := smtHTFLines
+settings.showChartSMT := smtChartLines
+settings.psp_show     := pspShow
+settings.followAutoHTFFilter := false
+
+// ─────────── Tickers (inputs live in section ①) ───────────
+settings.psp_sym1_use := in_use1
+settings.psp_sym1 := in_sym1
+settings.psp_sym2_use := in_use2
+settings.psp_sym2 := in_sym2
+settings.psp_sym3_use := in_use3
+settings.psp_sym3 := in_sym3
+settings.psp_sym4_use := in_use4
+settings.psp_sym4 := in_sym4
 string rawSym1 = settings.psp_sym1
 string rawSym2 = settings.psp_sym2
 string rawSym3 = settings.psp_sym3
@@ -774,78 +977,24 @@ bool rawUse1 = settings.psp_sym1_use
 bool rawUse2 = settings.psp_sym2_use
 bool rawUse3 = settings.psp_sym3_use
 bool rawUse4 = settings.psp_sym4_use
-// ═══════════════════════════════════════════════════════════════════════════
-// ▼▼▼ NEW DIVERGENCE SETTINGS (MATCHING PHOTO + REQUESTS) ▼▼▼
-// ═══════════════════════════════════════════════════════════════════════════
 
-settings.enableSMT := input.bool(true, '🔥 Master SMT Toggle', group = g_div)
-
-// SEPARATED SMT DISPLAY SETTINGS
-settings.showHTFSMT := input.bool(true, 'Display: HTF Panel SMT', group = g_div, tooltip = "Controls coloring and lines inside the HTF candle panel")
-settings.showChartSMT := input.bool(true, 'Display: Main Chart SMT', inline = 'chart_smt', group = g_div, tooltip = "Controls the long divergence lines drawn on price bars")
-string chartSmtStyle = input.string('Clean', '', options = ['Clean', 'Detailed'], inline = 'chart_smt', group = g_div)
-
-settings.psp_show := input.bool(true, '🔥 Enable HTF PSP', group = g_div) 
-
-// PSP Body Colors: 100% Opacity
-settings.psp_up_body := input.color(#00ADEF, 'Bullish PSP Color', inline = 'psp_colors', group = g_div)
-settings.psp_down_body := input.color(#DB5755, 'Bearish PSP Color', inline = 'psp_colors', group = g_div)
-
-settings.followAutoHTFFilter := input.bool(false, 'Follow Auto HTF Filter', group = g_div)
-
-// Timeframe Mapping (Defaults set to TRUE for 90m, 6h, 7h)
-bool smt_en_15m = input.bool(false, "15m", inline="tf15", group=g_div)
-color smt_col_15m = #0c3299 
-bool smt_en_30m = input.bool(false, "30m", inline="tf30", group=g_div)
-color smt_col_30m = #0c3299 
-bool smt_en_1h = input.bool(false, "1H", inline="tf1h", group=g_div)
-color smt_col_1h = #4caf50 
-bool smt_en_90m = input.bool(true, "90m", inline="tf90", group=g_div) // ALWAYS ON
-color smt_col_90m = #4caf50 
-bool smt_en_4h = input.bool(false, "4H", inline="tf4h", group=g_div)
-color smt_col_4h = #ff9800 
-bool smt_en_6h = input.bool(true, "6H", inline="tf6h", group=g_div) // ALWAYS ON
-color smt_col_6h = #ff9800 
-bool smt_en_7h = input.bool(true, "7H", inline="tf7h", group=g_div) // ALWAYS ON
-color smt_col_7h = #ff0000 
-bool smt_en_1d = input.bool(false, "1D", inline="tf1d", group=g_div)
-color smt_col_1d = #673ab7 
-bool smt_en_1w = input.bool(false, "1W", inline="tf1w", group=g_div)
-color smt_col_1w = #673ab7 
-bool smt_en_1m = input.bool(false, "1M", inline="tf1m", group=g_div)
-color smt_col_1m = #BDBDBD 
-bool smt_en_3m = input.bool(false, "3M", inline="tf3m", group=g_div)
-color smt_col_3m = #BDBDBD 
-
-bool smt_en_chart = input.bool(false, "Chart TF", inline="tfchart", group=g_div)
+// SMT per-timeframe toggles (15m/30m/1H/90m/4H/6H/7H/1D/1W) are inputs in section 8
+bool smt_en_1m  = false
+bool smt_en_3m  = false
+bool smt_en_chart = false
+color smt_col_15m = #0c3299
+color smt_col_30m = #0c3299
+color smt_col_1h  = #4caf50
+color smt_col_90m = #4caf50
+color smt_col_4h  = #ff9800
+color smt_col_6h  = #ff9800
+color smt_col_7h  = #ff0000
+color smt_col_1d  = #673ab7
+color smt_col_1w  = #673ab7
+color smt_col_1m  = #BDBDBD
+color smt_col_3m  = #BDBDBD
 color smt_col_chart = color.gray
-
-
-string div_line_style = input.string("Solid", "Line Style", options=["Solid", "Dashed", "Dotted"], inline="div_style", group=g_div)
-int div_line_width = input.int(1, "", minval=1, maxval=3, inline="div_style", group=g_div)
-color cleanSMTColor = input.color(#555555, "SMT Line Color", group=g_div)
-
-
-// Border and Wick inputs
-settings.psp_up_border := input.color(#000000, 'PSP Bull Border', inline = 'pspborder', group = group_psp_logic)
-settings.psp_down_border := input.color(#000000, 'PSP Bear Border', inline = 'pspborder', group = group_psp_logic)
-settings.psp_up_wick := input.color(#000000, 'PSP Bull Wick', inline = 'pspwick', group = group_psp_logic)
-settings.psp_down_wick := input.color(#000000, 'PSP Bear Wick', inline = 'pspwick', group = group_psp_logic)
-
-settings.sweep_show := input.bool(true, 'Show HTF Sweep Marks', inline = 'sweep', group = group_sweep)
-settings.sweep_color := input.color(#9c9c9c, '', inline = 'sweep', group = group_sweep)
-settings.smt_show := input.bool(true, 'Show SMT Divergence Lines', inline = 'smt', group = group_sweep)
-settings.smt_color := color.new(#ff9800, 0) 
-settings.smt_label_show := input.bool(false, 'Show Ticker Names on SMT Label', group = group_sweep)
-settings.smt_show_sym1 := input.bool(true, 'Show Ticker 1 name in label', inline = 'smtsym1', group = group_sweep)
-settings.smt_show_sym2 := input.bool(true, 'Show Ticker 2 name in label', inline = 'smtsym2', group = group_sweep)
-settings.smt_show_sym3 := input.bool(true, 'Show Ticker 3 name in label', inline = 'smtsym3', group = group_sweep)
-
-settings.show_sep := input.bool(true, "Show Separator between HTF groups", group=group_separator)
-settings.sep_color := input.color(color.gray, 'Separator Color', group=group_separator)
-settings.sep_style := "Dotted"
-settings.sep_width := 1
-settings.sep_tf := input.timeframe("30", "Timeframe To Use", group = group_separator)
+string chartSmtStyle = 'Clean'
 
 color color_transparent = #ffffff00
 var array<line> separators = array.new_line(0)
@@ -911,7 +1060,6 @@ SameInstrument(string symbol) =>
     string refRoot = ShortTicker(symbol)
     chartRoot == refRoot
   
-// UPDATED: Simplified to return [bool, color] to avoid NA type error
 PSPColor(bool bull, int candleTime, float c1, float o1, int t1, float c2, float o2, int t2, float c3, float o3, int t3, float c4, float o4, int t4) =>
     bool diverge1 = settings.psp_sym1_use and not na(c1) and not na(o1) and t1 == candleTime and (bull != (c1 > o1))
     bool diverge2 = settings.psp_sym2_use and not na(c2) and not na(o2) and t2 == candleTime and (bull != (c2 > o2))
@@ -921,8 +1069,7 @@ PSPColor(bool bull, int candleTime, float c1, float o1, int t1, float c2, float 
     color bodyCol = bull ? settings.psp_up_body : settings.psp_down_body
     [isPSP, bodyCol]
 
-// SMT TF Color and Enable Mapping (Updated for 7H, 6H, 90m)
-
+// SMT TF Color and Enable Mapping
 getSMTConfig(string tf) =>
     int smtTfSeconds = timeframe.in_seconds(tf)
     bool enabled = false
@@ -964,7 +1111,7 @@ getSMTConfig(string tf) =>
 
     [enabled, col]
 
-// Corrected Methods
+// Methods
 method HTFEnabled(CandleSet htf1, CandleSet htf2, CandleSet htf3) =>
     (htf1.settings.show ? 1 : 0) + (htf2.settings.show ? 1 : 0) + (htf3.settings.show ? 1 : 0)
 
@@ -1121,7 +1268,6 @@ method FindImbalance(CandleSet candleSet) =>
     candleSet
 
 // Exact peak finder: scans the real chart bars that belong to ONE HTF candle.
-// Returns the bar that made the extreme + that bar's own wick price.
 f_exactPeak(int startIdx, int endIdx, bool wantHigh, int fbIdx, float fbPx) =>
     int bestIdx = fbIdx
     float bestPx = fbPx
@@ -1225,10 +1371,10 @@ method DrawSweepAndSMT(CandleSet candleSet) =>
                             [bHiIdx, bHiPx] = f_exactPeak(B.bar_idx, bEnd, true, B.high_bar_idx, B.h)
                             ln = line.new(aHiIdx, aHiPx, bHiIdx, bHiPx, xloc=xloc.bar_index, color=cleanSMTColor, width=div_line_width, style=LineStyle(div_line_style))
                             array.push(chartSmtLines, ln)
-                            lbl = label.new(int(math.round((aHiIdx + bHiIdx) / 2)), (aHiPx + bHiPx) / 2, HTFName(candleSet.settings.htf), xloc=xloc.bar_index, style=label.style_none, textcolor=cleanSMTColor, size=size.tiny)
+                            lbl = label.new(int(math.round((aHiIdx + bHiIdx) / 2)), (aHiPx + bHiPx) / 2, HTFName(candleSet.settings.htf), xloc=xloc.bar_index, style=label.style_none, textcolor=smt_text_col, size=size.tiny)
                             array.push(chartSmtLabels, lbl)
                         if settings.smt_label_show and not bullishSMT
-                            B.smt_label := label.new(B_cx, B.h, str.trim(divLabelsUp), xloc=xloc.bar_index, style=label.style_label_down, color=color_transparent, textcolor=cleanSMTColor, size=size.tiny)
+                            B.smt_label := label.new(B_cx, B.h, str.trim(divLabelsUp), xloc=xloc.bar_index, style=label.style_label_down, color=color_transparent, textcolor=smt_text_col, size=size.tiny)
 
                     if bullishSMT
                         hasSMT := true
@@ -1239,11 +1385,11 @@ method DrawSweepAndSMT(CandleSet candleSet) =>
                             [bLoIdx, bLoPx] = f_exactPeak(B.bar_idx, bEnd, false, B.low_bar_idx, B.l)
                             ln = line.new(aLoIdx, aLoPx, bLoIdx, bLoPx, xloc=xloc.bar_index, color=cleanSMTColor, width=div_line_width, style=LineStyle(div_line_style))
                             array.push(chartSmtLines, ln)
-                            lbl = label.new(int(math.round((aLoIdx + bLoIdx) / 2)), (aLoPx + bLoPx) / 2, HTFName(candleSet.settings.htf), xloc=xloc.bar_index, style=label.style_none, textcolor=cleanSMTColor, size=size.tiny)
+                            lbl = label.new(int(math.round((aLoIdx + bLoIdx) / 2)), (aLoPx + bLoPx) / 2, HTFName(candleSet.settings.htf), xloc=xloc.bar_index, style=label.style_none, textcolor=smt_text_col, size=size.tiny)
                             array.push(chartSmtLabels, lbl)
                         if settings.smt_label_show
                             string combinedText = bearishSMT and str.trim(divLabelsUp) != "" ? str.trim(divLabelsUp) + " / " + str.trim(divLabelsDown) : str.trim(divLabelsDown)
-                            B.smt_label := label.new(B_cx, B.l, combinedText, xloc=xloc.bar_index, style=label.style_label_up, color=color_transparent, textcolor=cleanSMTColor, size=size.tiny)
+                            B.smt_label := label.new(B_cx, B.l, combinedText, xloc=xloc.bar_index, style=label.style_label_up, color=color_transparent, textcolor=smt_text_col, size=size.tiny)
 
             if settings.sweep_show and not hasSMT
                 if B.h > A.h
@@ -1279,10 +1425,6 @@ method Monitor(CandleSet candleSet) =>
         candle.l := nz(candleSet.settings.own_l, low)
         candle.o_time := HTFBarTime
         candle.bar_idx := bar_index
-        
-        int lookback = 0
-        float maxH = -1.0, float minL = 100000000.0
-        int maxHIdx = bar_index, int minLIdx = bar_index
         
         candle.high_bar_idx := bar_index
         candle.low_bar_idx := bar_index
@@ -1368,11 +1510,10 @@ method Update(CandleSet candleSet, int offset) =>
         if barstate.isrealtime or barstate.islast
             candleSet.Reorder(offset)
     candleSet
+
 // ═══════════════════════════════════════════════════════════════════════════
 // AUTO CORRELATED PAIRS (follows the chart asset)
 // ═══════════════════════════════════════════════════════════════════════════
-string ap_g = "Auto Pairs"
-bool autoPairs = input.bool(false, "Auto-pick SMT pairs from chart asset", group = ap_g, tooltip = "ON: Ticker 1-4 are chosen from the chart symbol (NQ -> ES/YM/RTY, Gold -> Silver/XAUEUR/XAUGBP, etc). The Ticker inputs are only used if the chart asset isn't recognised or this is OFF. The use-checkboxes still work as per-slot switches.")
 
 f_addPool(array<string> keys, array<string> syms, string k, string s) =>
     array.push(keys, k)
@@ -1438,10 +1579,12 @@ if autoPairs and apN > 0
     settings.psp_sym2_use := settings.psp_sym2_use and apN >= 2
     settings.psp_sym3_use := settings.psp_sym3_use and apN >= 3
     settings.psp_sym4_use := settings.psp_sym4_use and apN >= 4
-    settings.psp_sym1_use := settings.psp_sym1_use and not SameInstrument(settings.psp_sym1)
+
+settings.psp_sym1_use := settings.psp_sym1_use and not SameInstrument(settings.psp_sym1)
 settings.psp_sym2_use := settings.psp_sym2_use and not SameInstrument(settings.psp_sym2)
 settings.psp_sym3_use := settings.psp_sym3_use and not SameInstrument(settings.psp_sym3)
 settings.psp_sym4_use := settings.psp_sym4_use and not SameInstrument(settings.psp_sym4)
+
 [autoTf1, autoTf2, autoTf3] = AutoHTF()
 htf1.settings.htf := settings.auto_htf ? autoTf1 : htf_1
 htf2.settings.htf := settings.auto_htf ? autoTf2 : htf_2
@@ -1595,7 +1738,6 @@ if settings.show_sep
         candleYLo := math.min(candleYLo, htf2.candles.CandleSetLow(candleYHi))
     if htf3.settings.show and htf3.candles.size() > 0
         candleYHii = htf3.candles.CandleSetHigh(candleYHi)
-        candleYHii := candleYHii
         candleYHi := candleYHii
         candleYLo := math.min(candleYLo, htf3.candles.CandleSetLow(candleYHi))
     bool hasCandles = candleYHi > 0
@@ -1631,48 +1773,18 @@ plot(allHigh, title = '(internal) HTF scale anchor high', color = color.new(colo
 plot(allLow, title = '(internal) HTF scale anchor low', color = color.new(color.white, 100), display = display.pane)
 
 
-//==========================================
-// 1. RC INPUTS
 // ==========================================
-groupRC = "RC: Detection"
-requireColors = input.bool(false, "Require Opposite C1/C2 Colors", group=groupRC)
-requireCloseBack = input.bool(true, "Require C2 Close Back Inside", group=groupRC)
-maxMarks = input.int(100, "Recent XC2 Markings", minval=2, maxval=200, group=groupRC)
+// XC2 CONSTANTS
+// ==========================================
+bool hideHTF = hideRC
+bool hideLTF = hideRC
 
-groupTF = "RC: Visibility"
-hideHTF = input.bool(false, "Hide HTF Reversals", group=groupTF)
-hideLTF = input.bool(false, "Hide LTF Reversals", group=groupTF)
-
-groupLine = "RC: Lines"
-rcColor = input.color(color.black, "Line Color", group=groupLine)
-rcWidth = input.int(1, "Line Width", minval=1, maxval=5, group=groupLine)
-rcStyleInput = input.string("Solid", "Line Style", options=["Solid", "Dotted", "Dashed"], group=groupLine)
-
-groupLabel = "RC: Labels"
-showLabels = input.bool(true, "Show XC2 Labels", group=groupLabel)
-labelColor = input.color(color.black, "Text Color", group=groupLabel)
-labelSizeInput = input.string("Small", "Label Size", options=["Tiny", "Small", "Normal", "Large"], group=groupLabel)
+// Separator constants
+float sepTopPadding = 0.0
+float sepBottomPadding = 0.15
 
 // ==========================================
-// 3. SEPARATOR INPUTS
-// ==========================================
-groupSep = "Separator: Timeframe"
-bool enableChartSeparators = input.bool(false, "Show Main Chart Separators", group=groupSep)
-sepSelection = input.string("Auto", "Separator Timeframe", options=["Auto", "15m", "30m", "1H", "4H", "1D", "1W"], group=groupSep)
-sepLookback = input.int(150, "Lookback Bars", minval=20, maxval=500, group=groupSep)
-
-groupBounds = "Separator: Bounds"
-sepTopPadding = input.float(0.0, "Top Offset", minval=-0.2, maxval=0.5, step=0.01, group=groupBounds)
-sepBottomPadding = input.float(0.15, "Bottom Extension", minval=0, maxval=1, step=0.01, group=groupBounds)
-
-groupVisual = "Separator: Visuals"
-sepShowLabel = input.bool(true, "Show Timestamp", group=groupVisual)
-sepColor = input.color(color.new(#787b86, 70), "Line Color", group=groupVisual)
-sepTextColor = input.color(#787b86, "Text Color", group=groupVisual)
-sepWidth = input.int(1, "Line Width", minval=1, maxval=5, group=groupVisual)
-
-// ==========================================
-// 4. STYLE AND TIMEFRAME MAPPING
+// STYLE AND TIMEFRAME MAPPING
 // ==========================================
 rcStyle = switch rcStyleInput
     "Dotted" => line.style_dotted
@@ -1707,7 +1819,7 @@ string targetTF = isW1_D1 or isW1_H4 ? "W" : isD1_H1 ? "D" : isH4_M15 ? "240" : 
 string tfLabel = isW1_D1 or isW1_H4 ? "1W" : isD1_H1 ? "1D" : isH4_M15 ? "4H" : isH1_M5 ? "1H" : isM30_M3 ? "30M" : "15M"
 
 // ==========================================
-// 5. SINGLE XC2 DETECTION FUNCTION
+// SINGLE XC2 DETECTION FUNCTION
 // ==========================================
 f_detect() =>
     bool bullSweep = low[1] < low[2]
@@ -1731,9 +1843,8 @@ f_detect() =>
 
     [direction, level, time[2], time[1], time_close[1]]
 
-
 // ==========================================
-// 6. LATEST CONFIRMED EVENT FUNCTION
+// LATEST CONFIRMED EVENT FUNCTION
 // ==========================================
 f_latest() =>
     [direction, level, c1Time, c2Time, c2End] = f_detect()
@@ -1744,9 +1855,8 @@ f_latest() =>
     [latestDirection, latestTime]
 
 // ==========================================
-// 7. MULTI-TIMEFRAME XC2 DATA
+// MULTI-TIMEFRAME XC2 DATA
 // ==========================================
-
 [dirW, levelW, c1W, c2W, endW] = request.security(syminfo.tickerid, "W", f_detect(), lookahead=barmerge.lookahead_off)
 [dirD, levelD, c1D, c2D, endD] = request.security(syminfo.tickerid, "D", f_detect(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
 [dirH4, levelH4, c1H4, c2H4, endH4] = request.security(syminfo.tickerid, "240", f_detect(), lookahead=barmerge.lookahead_off)
@@ -1788,7 +1898,7 @@ bool bull = direction == 1
 bool bear = direction == -1
 
 // ==========================================
-// 8. XC2 DRAWING
+// XC2 DRAWING
 // ==========================================
 var array<line> xc2Lines = array.new_line()
 var array<label> xc2Labels = array.new_label()
@@ -1836,7 +1946,7 @@ if newXC2
             label.delete(oldLabel)
 
 // ==========================================
-// 12. DYNAMIC SEPARATORS
+// DYNAMIC SEPARATORS
 // ==========================================
 highestP = ta.highest(high, sepLookback)
 lowestP = ta.lowest(low, sepLookback)
@@ -1888,53 +1998,21 @@ if array.size(sepLabels) > 0
             label.set_y(currentLabel, chartTop)
 
 // ==========================================
-// 13. ALERTS
+// ALERTS
 // ==========================================
 alertcondition(newXC2 and bull, title="Bullish XC2", message="Confirmed Bullish XC2 on {{ticker}}")
 alertcondition(newXC2 and bear, title="Bearish XC2", message="Confirmed Bearish XC2 on {{ticker}}")
 
 // ─────────────────────────────────────
-// GENERAL SETTINGS
+// SESSION OPENS (WO / DO / 00:00 / 9:30 / 10:00)
 // ─────────────────────────────────────
 
 string tz = "America/New_York"
 
-string gWO = "Weekly Open (WO)"
-bool showWO = input.bool(true, "Display", group=gWO)
-bool labelWO = input.bool(true, "Show Label", group=gWO)
-
-string gDO = "Daily Open (18:00 NY)"
-bool showDO = input.bool(true, "Display", group=gDO)
-bool labelDO = input.bool(true, "Show Label", group=gDO)
-
-string gMID = "Midnight Open (00:00 NY)"
-bool showMID = input.bool(true, "Display", group=gMID)
-bool labelMID = input.bool(true, "Show Label", group=gMID)
-
-string gNY = "NY Equity Open (09:30 NY)"
-bool showNY = input.bool(true, "Display", group=gNY)
-bool labelNY = input.bool(true, "Show Label", group=gNY)
-
-string gTEN = "NY Reference (10:00 NY)"
-bool showTEN = input.bool(true, "Display", group=gTEN)
-bool labelTEN = input.bool(true, "Show Label", group=gTEN)
-
-// Appearance
-string gStyle = "Line Appearance"
-color lineColor = input.color(color.rgb(120, 123, 134), "Line Color", group=gStyle)
-int lineWidth = input.int(1, "Line Width", minval=1, maxval=5, group=gStyle)
-int rightPad = input.int(3, "Right Pad (bars)", minval=0, maxval=50, group=gStyle)
-int labelPad = input.int(0, "Label Pad (bars)", minval=0, maxval=10, group=gStyle)
-
-// History
-string gHistory = "History"
-bool showPrior = input.bool(false, "Show Previous Levels", group=gHistory)
+int rightPad = 3
+int labelPad = 0
 int keepDaily = showPrior ? 2 : 1
 int keepWeekly = showPrior ? 2 : 1
-
-// ─────────────────────────────────────
-// NEW YORK TIME DETECTION
-// ─────────────────────────────────────
 
 int h = hour(time, tz)
 int m = minute(time, tz)
@@ -1959,10 +2037,6 @@ bool atDO = isOpeningTime(18, 0)
 bool atMID = isOpeningTime(0, 0)
 bool atNY = isOpeningTime(9, 30)
 bool atTEN = isOpeningTime(10, 0)
-
-// ─────────────────────────────────────
-// OBJECT STORAGE
-// ─────────────────────────────────────
 
 var array<line> woLines = array.new<line>()
 var array<label> woLabels = array.new<label>()
@@ -1991,10 +2065,6 @@ var float priceMID = na
 var float priceNY = na
 var float priceTEN = na
 
-// ─────────────────────────────────────
-// DRAWING FUNCTIONS
-// ─────────────────────────────────────
-
 createLevel(array<line> ls, array<label> lbs, float price, string txt, bool showLbl) =>
     line ln = line.new(
          x1=bar_index,
@@ -2004,7 +2074,7 @@ createLevel(array<line> ls, array<label> lbs, float price, string txt, bool show
          xloc=xloc.bar_index,
          extend=extend.none,
          color=lineColor,
-         style=line.style_dotted,
+         style=LineStyle(lineStyle),
          width=lineWidth)
     array.push(ls, ln)
 
@@ -2018,8 +2088,8 @@ createLevel(array<line> ls, array<label> lbs, float price, string txt, bool show
              yloc=yloc.price,
              style=label.style_none,
              color=color.new(lineColor, 100),
-             textcolor=lineColor,
-             size=size.small,
+             textcolor=lvlTextColor,
+             size=lvlTextSize,
              textalign=text.align_left)
     array.push(lbs, lb)
 
@@ -2050,10 +2120,7 @@ trimLevels(array<line> ls, array<label> lbs, int depth) =>
         if not na(lb)
             label.delete(lb)
 
-// ─────────────────────────────────────
 // WEEKLY OPEN — SUNDAY 18:00 NY
-// ─────────────────────────────────────
-
 if showWO and atWO and (na(lastWO) or lastWO != dateNY)
     if array.size(woLines) > 0
         freezeLevel(woLines)
@@ -2067,10 +2134,7 @@ if showWO and array.size(woLines) > 0 and not na(priceWO)
 
 trimLevels(woLines, woLabels, keepWeekly)
 
-// ─────────────────────────────────────
 // DAILY OPEN — 18:00 NY
-// ─────────────────────────────────────
-
 if showDO and atDO and (na(lastDO) or lastDO != dateNY)
     if array.size(doLines) > 0
         freezeLevel(doLines)
@@ -2084,10 +2148,7 @@ if showDO and array.size(doLines) > 0 and not na(priceDO)
 
 trimLevels(doLines, doLabels, keepDaily)
 
-// ─────────────────────────────────────
 // MIDNIGHT OPEN — 00:00 NY
-// ─────────────────────────────────────
-
 if showMID and atMID and (na(lastMID) or lastMID != dateNY)
     if array.size(midLines) > 0
         freezeLevel(midLines)
@@ -2101,10 +2162,7 @@ if showMID and array.size(midLines) > 0 and not na(priceMID)
 
 trimLevels(midLines, midLabels, keepDaily)
 
-// ─────────────────────────────────────
 // NY EQUITY OPEN — 09:30 NY
-// ─────────────────────────────────────
-
 if showNY and atNY and (na(lastNY) or lastNY != dateNY)
     if array.size(nyLines) > 0
         freezeLevel(nyLines)
@@ -2118,10 +2176,7 @@ if showNY and array.size(nyLines) > 0 and not na(priceNY)
 
 trimLevels(nyLines, nyLabels, keepDaily)
 
-// ─────────────────────────────────────
 // NY REFERENCE — 10:00 NY
-// ─────────────────────────────────────
-
 if showTEN and atTEN and (na(lastTEN) or lastTEN != dateNY)
     if array.size(tenLines) > 0
         freezeLevel(tenLines)
@@ -2136,32 +2191,11 @@ if showTEN and array.size(tenLines) > 0 and not na(priceTEN)
 trimLevels(tenLines, tenLabels, keepDaily)
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ▼▼▼ FRACTAL C2 / C3 / C4 + T-SPOT MODULE v2 (paste at the END of PO3) ▼▼▼
+// ▼▼▼ FRACTAL C2 / C3 / C4 + T-SPOT MODULE ▼▼▼
 // ═══════════════════════════════════════════════════════════════════════════
 
-string fr_g = "Fractal / T-Spot"
-bool   fr_show      = input.bool(false, 'Show Fractal C2/C3/C4', group = fr_g)
-string fr_bias      = input.string('Neutral', 'Bias', options = ['Neutral', 'Bullish', 'Bearish'], group = fr_g)
-string fr_model     = input.string('Auto', 'Fractal', options = ['Custom', 'Auto', '1m-15m', '3m-30m', '5m-1H', '15m-4H', '1H-1D', '4H-1W', '1D-1W'], group = fr_g)
-string fr_cLTF      = input.timeframe('5', 'Custom LTF / HTF', group = fr_g, inline = 'frc')
-string fr_cHTF      = input.timeframe('60', '', group = fr_g, inline = 'frc')
-int    fr_hist      = input.int(1, 'History (0 = unlimited)', minval = 0, maxval = 40, group = fr_g)
-bool   fr_showLbl   = input.bool(true, 'Labels', group = fr_g)
-bool   fr_showT     = input.bool(true, 'T-Spot Box', group = fr_g, inline = 'frt')
-color  fr_bullBox   = input.color(color.new(color.green, 80), '', group = fr_g, inline = 'frt')
-color  fr_bearBox   = input.color(color.new(color.gray, 80), '', group = fr_g, inline = 'frt')
-bool   fr_showDashL = input.bool(true, 'C3/C4 Dash', group = fr_g, inline = 'frd')
-color  fr_dashCol   = input.color(color.black, '', group = fr_g, inline = 'frd')
-bool   fr_alerts    = input.bool(true, 'Alerts on C2', group = fr_g)
+// Fractal constants
 
-string fr_gd        = "Fractal Dashboard"
-bool   fr_showTbl   = input.bool(true, 'Show Dashboard', group = fr_gd)
-string fr_tblV      = input.string('Top', '', options = ['Top', 'Middle', 'Bottom'], inline = 'frloc', group = fr_gd)
-string fr_tblH      = input.string('Right', '', options = ['Left', 'Center', 'Right'], inline = 'frloc', group = fr_gd)
-color  fr_tblText   = input.color(color.new(#131722, 0), 'Text', inline = 'frcol', group = fr_gd)
-color  fr_tblBg     = input.color(color.new(#ffffff, 0), 'Background', inline = 'frcol', group = fr_gd)
-
-// ─────────────── TYPES ───────────────
 type FrSetup
     bool  isBull
     float extreme
@@ -2190,7 +2224,6 @@ var FrSetup fr_sell = na
 bool fr_allowBuy  = fr_bias != 'Bearish'
 bool fr_allowSell = fr_bias != 'Bullish'
 
-// ─────────────── TIMEFRAME HELPERS ───────────────
 fr_tfMins(string t) =>
     switch t
         '1D' => 1440
@@ -2248,7 +2281,6 @@ bool   fr_valid   = fr_model == 'Auto' ? fr_isAutoValid(fr_tfMins(fr_curTf())) :
 string fr_htfName = fr_name(fr_htfTf)
 string fr_ltfName = fr_name(fr_ltf())
 
-// ─────────────── HTF DATA ───────────────
 [fr_curH, fr_curL, fr_curC, fr_prevH1, fr_prevL1] = request.security(syminfo.tickerid, fr_htfTf, [high[0], low[0], close[0], high[1], low[1]], lookahead = barmerge.lookahead_on)
 
 bool fr_c2Buy  = fr_curL < fr_prevL1 and fr_curC > fr_prevL1
@@ -2285,7 +2317,6 @@ else
         fr_cL := low
         fr_cLBar := bar_index
 
-// ─────────────── DRAW HELPERS ───────────────
 fr_dirLabel(int x, float y, string txt, bool bullish) =>
     label.new(x, y, text = txt, xloc = xloc.bar_index, yloc = yloc.price, style = bullish ? label.style_label_up : label.style_label_down, color = na, textcolor = color.gray, size = size.small, text_font_family = font.family_monospace)
 
@@ -2323,7 +2354,6 @@ fr_register(FrSetup s) =>
         evicted = fr_records.shift()
         fr_deleteVisuals(evicted.setup)
 
-// ─────────────── SETUP LOGIC ───────────────
 fr_newSetup(bool isBull, float extremePrice, int extremeBar) =>
     FrSetup s = FrSetup.new(isBull, extremePrice, 1, false)
     s.c2Bar := extremeBar
@@ -2414,7 +2444,6 @@ fr_processC2(bool trigger, bool allow, bool isBull, float extremePrice, int extr
         result := existing.phase == 1 ? existing.advanceToC4() : existing.phase == 2 ? existing.finish() : existing
     result
 
-// ─────────────── MAIN LOGIC ───────────────
 bool fr_buyTrig  = fr_show and fr_periodChanged and fr_prevBuy
 bool fr_sellTrig = fr_show and fr_periodChanged and fr_prevSell
 
@@ -2433,7 +2462,7 @@ if fr_alerts
     if fr_sellTrig and fr_allowSell
         alert('Bearish C2 (' + fr_htfName + ') formed on ' + syminfo.ticker, alert.freq_once_per_bar)
 
-// ─────────────── DASHBOARD:  | 1H → 5m | XAUUSD - XAGUSD - ... ───────────────
+// Dashboard
 fr_addTk(string base, bool use, string sym) =>
     use ? (base == '' ? syminfo.ticker(sym) : base + ' - ' + syminfo.ticker(sym)) : base
 
@@ -2464,56 +2493,12 @@ if barstate.islast and fr_showTbl
     table.cell(fr_tbl, 0, 0, frTxt, text_color = fr_tblText, bgcolor = fr_tblBg, text_size = size.small, text_halign = text.align_left)
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ▼▼▼ FVG MTF MODULE v3 — FREEZE MODE FOLLOWS ATR DISTANCE ▼▼▼
+// ▼▼▼ FVG MTF MODULE ▼▼▼
 // ═══════════════════════════════════════════════════════════════════════════
 
-string FVG_MIT_CLOSE = "Close Inside / Beyond"
-string FVG_MIT_WICK  = "Any Wick Touch"
-string FVG_MIT_FULL  = "Full Fill"
-string FVG_MD_DELETE = "Delete"
-string FVG_MD_FADE   = "Freeze"
 
-string fvg_gVis = "FVG: Visibility"
-string fvg_gTf  = "FVG: Timeframes"
-string fvg_gCln = "FVG: Declutter"
-string fvg_gCol = "FVG: Colors"
-string fvg_gLbl = "FVG: Label"
+// FVG constants
 
-// ───────────── INPUTS ─────────────
-bool fvg_showAll = input.bool(true, "Show FVGs (master hide / unhide)", group = fvg_gVis)
-
-bool   fvg_show1 = input.bool(false, "Show", inline = "fvt1", group = fvg_gTf)
-string fvg_tf1   = input.timeframe("30",  "FVG TF 1", inline = "fvt1", group = fvg_gTf)
-bool   fvg_show2 = input.bool(true, "Show", inline = "fvt2", group = fvg_gTf)
-string fvg_tf2   = input.timeframe("60",  "FVG TF 2", inline = "fvt2", group = fvg_gTf)
-bool   fvg_show3 = input.bool(true, "Show", inline = "fvt3", group = fvg_gTf)
-string fvg_tf3   = input.timeframe("240", "FVG TF 3", inline = "fvt3", group = fvg_gTf)
-
-string fvg_mitMode = input.string(FVG_MIT_WICK, "Mitigation Rule", options = [FVG_MIT_CLOSE, FVG_MIT_WICK, FVG_MIT_FULL], group = fvg_gTf,
-     tooltip = "Close Inside / Beyond: a chart candle CLOSES inside the gap, or closes through it (judged at candle close by definition).\nAny Wick Touch: any wick enters the gap.\nFull Fill: price trades through the entire gap (wick-based).")
-bool fvg_liveMit = input.bool(true, "Live mitigation (wick / full-fill react on every tick)", group = fvg_gTf,
-     tooltip = "ON: with Any Wick Touch or Full Fill, a gap is hidden/frozen the instant price touches it, not when the candle closes. Has no effect on the Close rule.")
-string fvg_mitDisplay = input.string(FVG_MD_FADE, "Mitigated FVGs", options = [FVG_MD_DELETE, FVG_MD_FADE], group = fvg_gTf,
-     tooltip = "Delete: mitigated gaps disappear.\nFreeze: they stay as a frozen box. They follow the same ATR distance and timeframe toggles as normal FVGs.")
-int fvg_extBars = input.int(15, "Extension Bars (chart bars ahead of price)", minval = 1, maxval = 400, group = fvg_gTf)
-int fvg_maxFvg  = input.int(20, "Max Tracked FVGs (all TFs combined)", minval = 1, maxval = 250, group = fvg_gTf)
-
-float fvg_maxDistAtr = input.float(1.5, "Max distance from price (x daily ATR, 0 = off)", minval = 0.0, step = 0.25, group = fvg_gCln,
-     tooltip = "FVGs (including frozen ones) farther than this from the current close are hidden. They reappear when price gets close.")
-float fvg_minGapAtr  = input.float(0.02, "Min gap size (x daily ATR, 0 = off)", minval = 0.0, step = 0.01, group = fvg_gCln,
-     tooltip = "Ignore tiny gaps smaller than this.")
-bool  fvg_noOverlap  = input.bool(true, "Skip FVGs overlapping an existing one (same direction, same/higher TF)", group = fvg_gCln)
-
-color fvg_bullCol = input.color(color.new(color.teal, 85), "Bullish FVG", group = fvg_gCol)
-color fvg_bearCol = input.color(color.new(color.red, 85),  "Bearish FVG", group = fvg_gCol)
-color fvg_mitCol  = input.color(color.new(color.gray, 92), "Mitigated FVG (freeze mode)", group = fvg_gCol)
-int   fvg_borderTr = input.int(70, "Border Transparency", minval = 0, maxval = 100, group = fvg_gCol)
-
-bool   fvg_showLabel = input.bool(true, "Show FVG Label", group = fvg_gLbl)
-string fvg_lblSize   = input.string(size.small, "Label Size", options = [size.tiny, size.small, size.normal], group = fvg_gLbl)
-int    fvg_lblTransp = input.int(0, "Label Transparency (0 = solid)", minval = 0, maxval = 100, group = fvg_gLbl)
-
-// ───────────── STATE ─────────────
 var array<box>   fvg_box  = array.new_box()
 var array<float> fvg_top  = array.new_float()
 var array<float> fvg_bot  = array.new_float()
@@ -2521,7 +2506,7 @@ var array<int>   fvg_bar  = array.new_int()
 var array<bool>  fvg_bull = array.new_bool()
 var array<int>   fvg_sec  = array.new_int()
 
-// Frozen (mitigated) FVGs are kept here so they can follow the ATR distance rule
+// Frozen (mitigated) FVGs follow the ATR distance rule
 var array<box>   fz_box = array.new_box()
 var array<float> fz_top = array.new_float()
 var array<float> fz_bot = array.new_float()
@@ -2543,7 +2528,6 @@ fvg_closing(int sec) =>
 
 float fvg_dAtr = request.security(syminfo.tickerid, "D", ta.atr(14)[1], lookahead = barmerge.lookahead_on)
 
-// ───────────── HELPERS ─────────────
 fvg_tfLabel(string tf) =>
     int sec = timeframe.in_seconds(tf)
     string s = ""
@@ -2650,6 +2634,7 @@ fvg_updateFrozen() =>
                 box.set_border_color(b, vis ? color.new(color.gray, 85) : color(na))
                 box.set_text_color(b, vis ? color.new(color.gray, 60) : color(na))
     0
+
 // Confirmed-bar pass
 fvg_updateAll() =>
     int nF = array.size(fvg_box)
