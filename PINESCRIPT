@@ -9,12 +9,13 @@ indicator("PO3",
      calc_bars_count = 3000)
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SETTINGS PANEL — numbered sections, one function per section
+// SETTINGS PANEL
 //  1 Correlated Assets   2 Direction        3 HTF Candles      4 Features
-//  5 Candle Style        6 CISD             7 Fib Projections  8 SMT
-//  9 Fair Value Gaps    10 HTF Imbalances  11 Fractal         12 Fractal Dashboard
+//  5 Candle Style        6 CISD             7 Fib Projections  8 SMT / SSMT
+//  9 Fair Value Gaps (9a 30m, 9b 1H, 9c 4H)
+// 10 HTF Imbalances     11 Fractal         12 Fractal Dashboard
 // 13 XC2                14 Session Opens   15 Reference Style  16 Separators
-// Anything not exposed as an input is a constant you can edit in the code.
+// ALERTS: see the ALERTS section at the very bottom of the script.
 // ═══════════════════════════════════════════════════════════════════════════
 
 string g01 = "1. CORRELATED ASSETS ________________"
@@ -25,7 +26,11 @@ string g05 = "5. CANDLE STYLE ________________"
 string g06 = "6. CISD ________________"
 string g07 = "7. FIBONACCI PROJECTIONS ________________"
 string g08 = "8. SMT ________________"
-string g09 = "9. FAIR VALUE GAPS ________________"
+string g08b = "8b. SSMT ________________"
+string g09 = "9. FAIR VALUE GAPS (shared) ________________"
+string g09a = "9a. FVG 30m ________________"
+string g09b = "9b. FVG 1H ________________"
+string g09c = "9c. FVG 4H ________________"
 string g10 = "10. HTF IMBALANCES ________________"
 string g11 = "11. FRACTAL C2 / C3 / C4 ________________"
 string g12 = "12. FRACTAL DASHBOARD ________________"
@@ -41,8 +46,6 @@ color C_TRANSPARENT = color.new(color.white, 100)
 string FVG_MIT_CLOSE = "Close Inside / Beyond"
 string FVG_MIT_WICK  = "Any Wick Touch"
 string FVG_MIT_FULL  = "Full Fill"
-string FVG_MD_DELETE = "Delete"
-string FVG_MD_FADE   = "Freeze"
 
 // ═════════════ 1. CORRELATED ASSETS ═════════════
 bool   autoPairs = input.bool(false, 'Auto Detect Correlated Assets', group = g01, tooltip = "ON: Assets 1-4 are chosen from the chart symbol (NQ -> ES/YM/RTY, Gold -> Silver/XAUEUR/XAUGBP, etc). The symbol boxes are only used if the chart asset isn't recognised or this is OFF. The Use-checkboxes still work as per-slot switches.")
@@ -74,17 +77,14 @@ int in_width     = input.int(2, 'Candle width', minval = 1, maxval = 4, group = 
 int in_buffer    = input.int(1, 'Space between candles', minval = 1, maxval = 4, group = g03)
 int in_htfBuffer = input.int(5, 'Space between HTFs', minval = 1, maxval = 10, group = g03)
 
-// ═════════════ 4. FEATURES (toggle + colors on one row) ═════════════
-bool  fvg_showAll    = input.bool(true, 'Enable FVG?', inline = 'ft1', group = g04)
-color fvg_bullCol    = input.color(color.new(color.teal, 85), '', inline = 'ft1', group = g04)
-color fvg_bearCol    = input.color(color.new(color.red, 85), '', inline = 'ft1', group = g04)
+// ═════════════ 4. FEATURES ═════════════
 bool  smtEnable      = input.bool(true, 'Enable SMT?', inline = 'ft2', group = g04)
 color cleanSMTColor  = input.color(#555555, '', inline = 'ft2', group = g04)
 bool  pspShow        = input.bool(true, 'Enable PSP?', inline = 'ft3', group = g04)
 color in_pspUp       = input.color(#00ADEF, '', inline = 'ft3', group = g04)
 color in_pspDown     = input.color(#DB5755, '', inline = 'ft3', group = g04)
 bool  smtHTFLines    = input.bool(true, 'HTF SMT', group = g04, tooltip = "SMT lines inside the HTF candle panel")
-bool  smtChartLines  = input.bool(true, 'Chart SMT', group = g04, tooltip = "Long divergence lines drawn on the main chart bars")
+bool  smtChartLines  = input.bool(true, 'Chart SMT', group = g04, tooltip = "Draws SMT lines on the main chart. Bullish text above the line, bearish text below the line. Supports all enabled SMT timeframes.")
 
 // ═════════════ 5. CANDLE STYLE ═════════════
 color  in_bullBody   = input.color(color.new(#ffffff, 10), 'Body', inline = 'cs1', group = g05)
@@ -144,8 +144,8 @@ bool  cisd_fib_n45       = input.bool(true, '-4.5', inline = 'fb3', group = g07)
 int    div_line_width = input.int(1, 'SMT Line Width', minval = 1, maxval = 3, group = g08)
 string div_line_style = input.string("Solid", 'SMT Line Style', options = ["Solid", "Dashed", "Dotted"], group = g08)
 bool   smt_label_show = input.bool(false, 'Show Ticker Names on SMT Label', group = g08)
-color  smt_text_col   = input.color(color.black, 'SMT Text Color', group = g08)
-// SMT per-timeframe on/off
+color  smt_text_col   = input.color(#808080, 'SMT Text Color', group = g08)
+// SMT timeframe switches
 bool   smt_en_15m = input.bool(true, '15m', inline = 'st1', group = g08)
 bool   smt_en_30m = input.bool(true, '30m', inline = 'st1', group = g08)
 bool   smt_en_1h  = input.bool(true, '1H',  inline = 'st1', group = g08)
@@ -155,27 +155,81 @@ bool   smt_en_6h  = input.bool(true, '6H',  inline = 'st2', group = g08)
 bool   smt_en_7h  = input.bool(true, '7H',  inline = 'st3', group = g08)
 bool   smt_en_1d  = input.bool(true, '1D',  inline = 'st3', group = g08)
 bool   smt_en_1w  = input.bool(true, '1W',  inline = 'st3', group = g08)
+int    smtTolTicks  = input.int(2, 'Swing: Equal H/L Tolerance (ticks)', minval = 0, group = g08)
+int    smtMinAssets = input.int(1, 'Swing: Min Assets Diverging', minval = 1, maxval = 4, group = g08)
+bool   smtInv1 = input.bool(false, 'Inverse A1', inline = 'si1', group = g08)
+bool   smtInv2 = input.bool(false, 'A2', inline = 'si1', group = g08)
+bool   smtInv3 = input.bool(false, 'A3', inline = 'si2', group = g08)
+bool   smtInv4 = input.bool(false, 'A4', inline = 'si2', group = g08)
+color  smtBearCol = input.color(#ef5350, 'Swing Bear / Bull Colour', inline = 'sc1', group = g08)
+color  smtBullCol = input.color(#26a69a, '', inline = 'sc1', group = g08)
+int    smtMax     = input.int(50, 'Swing: Max SMT Markings', minval = 5, maxval = 100, group = g08)
+bool   smtSwingOn = input.bool(false, 'Swing SMT (chart timeframe, extra)', group = g08, tooltip = "OFF by default. Marks swing-high/low SMT on the chart timeframe only.")
 
-// ═════════════ 9. FAIR VALUE GAPS ═════════════
-bool   fvg_show1 = input.bool(false, 'FVG TF 1', inline = 'fv1', group = g09)
-string fvg_tf1   = input.timeframe("30", '', inline = 'fv1', group = g09)
-bool   fvg_show2 = input.bool(true, 'FVG TF 2', inline = 'fv2', group = g09)
-string fvg_tf2   = input.timeframe("60", '', inline = 'fv2', group = g09)
-bool   fvg_show3 = input.bool(true, 'FVG TF 3', inline = 'fv3', group = g09)
-string fvg_tf3   = input.timeframe("240", '', inline = 'fv3', group = g09)
-string fvg_mitMode    = input.string(FVG_MIT_WICK, 'Mitigation Rule', options = [FVG_MIT_CLOSE, FVG_MIT_WICK, FVG_MIT_FULL], group = g09)
-bool   fvg_liveMit    = input.bool(true, 'Live Mitigation', group = g09, tooltip = "ON: with Any Wick Touch or Full Fill, a gap is hidden/frozen the instant price touches it, not when the candle closes.")
-string fvg_mitDisplay = input.string(FVG_MD_FADE, 'Mitigated FVGs', options = [FVG_MD_DELETE, FVG_MD_FADE], group = g09)
-color  fvg_mitCol     = input.color(color.new(color.gray, 92), 'Mitigated Color', group = g09)
-float  fvg_maxDistAtr = input.float(1.5, 'Max Distance (x daily ATR, 0 = off)', minval = 0.0, step = 0.25, group = g09)
-float  fvg_minGapAtr  = input.float(0.02, 'Min Gap Size (x daily ATR)', minval = 0.0, step = 0.01, group = g09)
-bool   fvg_noOverlap  = input.bool(true, 'Skip Overlapping FVGs', group = g09)
-int    fvg_extBars    = input.int(15, 'Extension Bars', minval = 1, maxval = 400, group = g09)
-int    fvg_maxFvg     = input.int(20, 'Max Tracked FVGs', minval = 1, maxval = 250, group = g09)
-int    fvg_borderTr   = input.int(70, 'Border Transparency', minval = 0, maxval = 100, group = g09)
-bool   fvg_showLabel  = input.bool(true, 'FVG Label', inline = 'fv4', group = g09)
-string fvg_lblSize    = input.string(size.small, '', options = [size.tiny, size.small, size.normal], inline = 'fv4', group = g09)
-int    fvg_lblTransp  = input.int(0, 'Label Transparency', minval = 0, maxval = 100, group = g09)
+// ═════════════ 8b. SSMT ═════════════
+bool   ssmtOn = input.bool(true, 'Enable SSMT (2 consecutive closed HTF candles)', group = g08b, tooltip = "Compares the last two CLOSED HTF candles. The chart TF must be lower than the selected SSMT TF.")
+int    ssmt_line_width = input.int(1, 'SSMT Line Width', minval = 1, maxval = 3, group = g08b)
+string ssmt_line_style = input.string("Solid", 'SSMT Line Style', options = ["Solid", "Dashed", "Dotted"], group = g08b)
+bool   ssmt_label_show = input.bool(false, 'Show Ticker Names on SSMT Label', group = g08b)
+color  ssmt_text_col = input.color(#808080, 'SSMT Text Color', group = g08b)
+bool   ssmt_en_15m = input.bool(false, '15m', inline = 'sst1', group = g08b)
+bool   ssmt_en_30m = input.bool(false, '30m', inline = 'sst1', group = g08b)
+bool   ssmt_en_1h  = input.bool(false, '1H',  inline = 'sst1', group = g08b)
+bool   ssmt_en_90m = input.bool(true, '90m', inline = 'sst2', group = g08b)
+bool   ssmt_en_4h  = input.bool(true, '4H',  inline = 'sst2', group = g08b)
+bool   ssmt_en_6h  = input.bool(true, '6H',  inline = 'sst2', group = g08b)
+bool   ssmt_en_7h  = input.bool(true, '7H',  inline = 'sst3', group = g08b)
+bool   ssmt_en_1d  = input.bool(false, '1D',  inline = 'sst3', group = g08b)
+bool   ssmt_en_1w  = input.bool(false, '1W',  inline = 'sst3', group = g08b)
+int    ssmtTolTicks = input.int(2, 'Equal H/L Tolerance (ticks)', minval = 0, group = g08b)
+int    ssmtMinAssets = input.int(1, 'Min Assets Diverging', minval = 1, maxval = 4, group = g08b)
+bool   ssmtInv1 = input.bool(false, 'Inverse A1', inline = 'ssi1', group = g08b)
+bool   ssmtInv2 = input.bool(false, 'A2', inline = 'ssi1', group = g08b)
+bool   ssmtInv3 = input.bool(false, 'A3', inline = 'ssi2', group = g08b)
+bool   ssmtInv4 = input.bool(false, 'A4', inline = 'ssi2', group = g08b, tooltip = "Tick for inversely correlated assets.")
+color  ssmtBearCol = input.color(#ef5350, 'Bear / Bull Colour', inline = 'ssc1', group = g08b)
+color  ssmtBullCol = input.color(#26a69a, '', inline = 'ssc1', group = g08b)
+int    ssmtMax = input.int(50, 'Max SSMT Markings', minval = 5, maxval = 100, group = g08b)
+
+// ═════════════ 9. FAIR VALUE GAPS (30m / 1H / 4H) ═════════════
+bool   fvgOn        = input.bool(true, 'Show FVGs (master switch)', group = g09)
+color  fvgMitCol    = input.color(color.new(#636363, 80), 'Mitigated Colour', group = g09)
+int    fvgBorderTr  = input.int(60, 'Border Transparency', minval = 0, maxval = 100, group = g09)
+bool   fvgNoOverlap = input.bool(true, 'Skip Overlapping FVGs', group = g09, tooltip = "Skips a new gap that overlaps an open gap of the same direction from an equal or higher timeframe.")
+int    fvgMax       = input.int(150, 'Max FVGs on Chart', minval = 10, maxval = 250, group = g09, tooltip = "Includes frozen (tapped) gaps. Oldest are removed first.")
+bool   fvgCE        = input.bool(true, 'Show CE (50%) Line', group = g09)
+int    fvgMaxVisible = input.int(4, 'Max Visible FVGs (nearest to price)', minval = 0, maxval = 30, group = g09, tooltip = 'Only the N unmitigated FVGs closest to the current price are drawn. Others stay tracked and reappear when price gets closer. 0 = no limit.')
+bool   fvgHideNested = input.bool(true, 'Hide FVG Inside Higher-TF FVG', group = g09, tooltip = 'A 30m/1H gap that sits inside an active 1H/4H gap of the same direction is hidden, so stacked zones do not pile up.')
+bool   fvgFreezeMit   = input.bool(true, 'Freeze Mitigated FVGs (keep on chart)', group = g09, tooltip = 'ON: when price taps a gap it FREEZES (stops extending, turns grey) and stays on the chart until fully broken through. OFF: a tapped gap is deleted immediately. The per-timeframe "Delete When Mitigated" switches still force deletion for that timeframe.')
+// Shared daily ATR controls, adapted from po3 2.txt (all FVG timeframes).
+bool   fvgAtrVisible = input.bool(true, 'ATR Dynamic Visibility', group = g09, tooltip = 'Only draw FVGs near the current price. Distant FVGs remain tracked and reappear when price approaches.')
+float  fvgMaxDistAtr = input.float(1.0, 'Max Distance (x Daily ATR)', minval = 0.0, step = 0.25, group = g09, tooltip = '0 disables the distance restriction.')
+float  fvgMinGapAtr = input.float(0.08, 'Min Gap Size (x Daily ATR)', minval = 0.0, step = 0.01, group = g09, tooltip = 'Additional minimum FVG size; 0 disables this filter. Per-timeframe minimum tick sizes still apply.')
+int    fvgExt       = input.int(15, 'Extension Bars', minval = 1, maxval = 400, group = g09)
+string fvgLblSize   = input.string(size.tiny, 'Label Size', options = [size.tiny, size.small, size.normal], group = g09)
+bool   fvgShow30  = input.bool(false, '30m', inline = 'fvg30m', group = g09a)
+color  fvgBull30  = input.color(color.new(#26a69a, 85), '', inline = 'fvg30m', group = g09a)
+color  fvgBear30  = input.color(color.new(#ef5350, 85), '', inline = 'fvg30m', group = g09a)
+string fvgMit30   = input.string(FVG_MIT_WICK, 'Mitigation Rule', options = [FVG_MIT_CLOSE, FVG_MIT_WICK, FVG_MIT_FULL], group = g09a)
+bool   fvgKill30  = input.bool(false, 'Delete When Mitigated', group = g09a)
+int    fvgMin30   = input.int(1, 'Min Gap Size (ticks)', minval = 0, group = g09a)
+bool   fvgLbl30   = input.bool(true, 'Show Label', group = g09a)
+
+bool   fvgShow60  = input.bool(true, '1H', inline = 'fvg1H', group = g09b)
+color  fvgBull60  = input.color(color.new(#26a69a, 85), '', inline = 'fvg1H', group = g09b)
+color  fvgBear60  = input.color(color.new(#ef5350, 85), '', inline = 'fvg1H', group = g09b)
+string fvgMit60   = input.string(FVG_MIT_WICK, 'Mitigation Rule', options = [FVG_MIT_CLOSE, FVG_MIT_WICK, FVG_MIT_FULL], group = g09b)
+bool   fvgKill60  = input.bool(false, 'Delete When Mitigated', group = g09b)
+int    fvgMin60   = input.int(1, 'Min Gap Size (ticks)', minval = 0, group = g09b)
+bool   fvgLbl60   = input.bool(true, 'Show Label', group = g09b)
+
+bool   fvgShow240 = input.bool(true, '4H', inline = 'fvg4H', group = g09c)
+color  fvgBull240 = input.color(color.new(#26a69a, 85), '', inline = 'fvg4H', group = g09c)
+color  fvgBear240 = input.color(color.new(#ef5350, 85), '', inline = 'fvg4H', group = g09c)
+string fvgMit240  = input.string(FVG_MIT_WICK, 'Mitigation Rule', options = [FVG_MIT_CLOSE, FVG_MIT_WICK, FVG_MIT_FULL], group = g09c)
+bool   fvgKill240 = input.bool(false, 'Delete When Mitigated', group = g09c)
+int    fvgMin240  = input.int(1, 'Min Gap Size (ticks)', minval = 0, group = g09c)
+bool   fvgLbl240  = input.bool(true, 'Show Label', group = g09c)
 
 // ═════════════ 10. HTF IMBALANCES ═════════════
 bool  in_htfFvgOn  = input.bool(true, 'HTF FVG', inline = 'hi1', group = g10)
@@ -224,11 +278,6 @@ bool showNY  = input.bool(true, 'Show NY Open (9:30)', group = g14)
 bool showTEN = input.bool(true, 'Show NY Ref (10:00)', group = g14)
 bool showLvlLabels = input.bool(true, 'Show Labels', group = g14)
 bool showPrior     = input.bool(false, 'Show Previous Levels', group = g14)
-bool labelWO  = showLvlLabels
-bool labelDO  = showLvlLabels
-bool labelMID = showLvlLabels
-bool labelNY  = showLvlLabels
-bool labelTEN = showLvlLabels
 
 // ═════════════ 15. REFERENCE STYLE ═════════════
 color  lineColor    = input.color(color.rgb(120, 123, 134), 'Line Color', group = g15)
@@ -258,12 +307,9 @@ int pivot_len = 1
 bool pivot_delete_on_cross = true
 bool cisd_invalidate_on_cross = true
 
-// CISD constants (edit here if needed)
 string cisd_sensitivity     = 'Standard'
 int    cisd_pending_timeout = cisd_sensitivity == 'Standard' ? 10 : 20
 bool   cisd_exhaustive      = false
-
-
 
 type CISDStretch
     bool bullish
@@ -659,6 +705,10 @@ if inp_cisd_show and bool(pivotLow) and BIAS_BULL
         stB = CISDStretch.new(true, origin_bar_b, lvlB, end_bar_b, endClsB, origHB, origLB, run_ext_bar_b, runExtPxB)
         array.push(pending_cisd, PendingCISD.new(stB, pivot_bar_b, bar_index, lnB))
 
+// ALERT FLAGS — set true on the bar a CISD is confirmed (consumed by alertcondition at the bottom)
+bool cisdBullConf = false
+bool cisdBearConf = false
+
 if inp_cisd_show and array.size(pending_cisd) > 0
     for i = array.size(pending_cisd) - 1 to 0
         p = array.get(pending_cisd, i)
@@ -692,6 +742,10 @@ if inp_cisd_show and array.size(pending_cisd) > 0
             float pivotPriceForCISD = p.stretch.bullish ? low[bar_index - p.pivot_bar] : high[bar_index - p.pivot_bar]
             ci = ConfirmedCISD.new(p.stretch, p.pivot_bar, pivotPriceForCISD, bar_index, ln_c, shp)
             array.push(confirmed_cisd, ci)
+            if p.stretch.bullish
+                cisdBullConf := true
+            else
+                cisdBearConf := true
             if cisd_fib_show and (cisd_fib_prop or not isProp)
                 bool fib_spacing_ok = true
                 if timeframe.in_seconds() < 3600
@@ -721,8 +775,8 @@ type Candle
     float l
     int o_time
     int bar_idx
-    int high_bar_idx // Exact bar index of the HTF High
-    int low_bar_idx   // Exact bar index of the HTF Low
+    int high_bar_idx
+    int low_bar_idx
     string dow
     box body
     line wick_up
@@ -783,8 +837,6 @@ type CandleSettings
     int sym4_t
 
 type Settings
-    bool auto_htf
-    bool auto_count
     color bull_body
     color bull_border
     color bull_wick
@@ -818,16 +870,9 @@ type Settings
     string psp_sym4
     color psp_up_body
     color psp_down_body
-    color psp_up_border
-    color psp_down_border
-    color psp_up_wick
-    color psp_down_wick
     bool sweep_show
     color sweep_color
     bool smt_show
-    color smt_color
-    color smt_bull_body
-    color smt_bear_body
     bool smt_label_show
     bool smt_show_sym1
     bool smt_show_sym2
@@ -836,11 +881,9 @@ type Settings
     color sep_color
     string sep_style
     int sep_width
-    string sep_tf
     bool enableSMT
     bool showChartSMT
     bool showHTFSMT
-    bool followAutoHTFFilter
 
 type CandleSet
     array<Candle> candles
@@ -877,10 +920,6 @@ htf3.settings := SettingsHTF3
 htf3.candles := candles_3
 htf3.imbalances := imbalances_3
 
-settings.auto_htf := false
-settings.auto_count := false
-
-// ─────────── HTF slot mapping (from the Quick Settings dropdowns) ───────────
 f_tfMap(string s) =>
     switch s
         '15m' => '15'
@@ -897,18 +936,11 @@ f_tfMap(string s) =>
 string htf_1 = f_tfMap(htfTf1)
 string htf_2 = f_tfMap(htfTf2)
 string htf_3 = f_tfMap(htfTf3)
-int maxDisp1 = htfCnt1
-int maxDisp2 = htfCnt2
-int maxDisp3 = htfCnt3
 htf1.settings.show := htfOn1
 htf2.settings.show := htfOn2
 htf3.settings.show := htfOn3
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 🎨 AESTHETICS (part 2: settings-bound)
-// ═══════════════════════════════════════════════════════════════════════════
-
-// HTF look (inputs live in section ①)
+// HTF look
 settings.bull_body     := in_bullBody
 settings.bear_body     := in_bearBody
 settings.bull_border   := in_bullBorder
@@ -939,28 +971,18 @@ settings.vi_show         := in_htfViOn
 settings.show_sep        := in_sepShow
 settings.smt_label_show  := smt_label_show
 
-// ─────────── Constants for HTF look & feel ───────────
-settings.psp_up_border := #000000
-settings.psp_down_border := #000000
-settings.psp_up_wick := #000000
-settings.psp_down_wick := #000000
 settings.smt_show := true
-settings.smt_color := color.new(#ff9800, 0)
 settings.smt_show_sym1 := true
 settings.smt_show_sym2 := true
 settings.smt_show_sym3 := true
 settings.sep_style := "Dotted"
 settings.sep_width := 1
-settings.sep_tf := "30"
 
-// ─────────── SMT / PSP (Quick Settings) ───────────
 settings.enableSMT    := smtEnable
 settings.showHTFSMT   := smtHTFLines
 settings.showChartSMT := smtChartLines
 settings.psp_show     := pspShow
-settings.followAutoHTFFilter := false
 
-// ─────────── Tickers (inputs live in section ①) ───────────
 settings.psp_sym1_use := in_use1
 settings.psp_sym1 := in_sym1
 settings.psp_sym2_use := in_use2
@@ -978,24 +1000,6 @@ bool rawUse2 = settings.psp_sym2_use
 bool rawUse3 = settings.psp_sym3_use
 bool rawUse4 = settings.psp_sym4_use
 
-// SMT per-timeframe toggles (15m/30m/1H/90m/4H/6H/7H/1D/1W) are inputs in section 8
-bool smt_en_1m  = false
-bool smt_en_3m  = false
-bool smt_en_chart = false
-color smt_col_15m = #0c3299
-color smt_col_30m = #0c3299
-color smt_col_1h  = #4caf50
-color smt_col_90m = #4caf50
-color smt_col_4h  = #ff9800
-color smt_col_6h  = #ff9800
-color smt_col_7h  = #ff0000
-color smt_col_1d  = #673ab7
-color smt_col_1w  = #673ab7
-color smt_col_1m  = #BDBDBD
-color smt_col_3m  = #BDBDBD
-color smt_col_chart = color.gray
-string chartSmtStyle = 'Clean'
-
 color color_transparent = #ffffff00
 var array<line> separators = array.new_line(0)
 var array<line> chartSmtLines = array.new_line(0)
@@ -1007,21 +1011,6 @@ LineStyle(string style) =>
         'Dashed' => line.style_dashed
         'Dotted' => line.style_dotted
         => line.style_solid
-
-AutoHTF() =>
-    float chartSec = timeframe.in_seconds(timeframe.period)
-    string tf1 = '240', string tf2 = '360', string tf3 = 'D'
-    if chartSec <= 60
-        tf1 := '15', tf2 := '30', tf3 := '60'
-    else if chartSec <= 180
-        tf1 := '30', tf2 := '60', tf3 := '240'
-    else if chartSec <= 300
-        tf1 := '60', tf2 := '90', tf3 := '240'
-    else if chartSec <= 900
-        tf1 := '60', tf2 := '240', tf3 := '360'
-    else if chartSec <= 3600
-        tf1 := '240', tf2 := '360', tf3 := 'D'
-    [tf1, tf2, tf3]
 
 ValidTimeframe(string HTF) =>
     int chartSeconds = timeframe.in_seconds(timeframe.period)
@@ -1059,7 +1048,7 @@ SameInstrument(string symbol) =>
     string chartRoot = ShortTicker(syminfo.tickerid)
     string refRoot = ShortTicker(symbol)
     chartRoot == refRoot
-  
+
 PSPColor(bool bull, int candleTime, float c1, float o1, int t1, float c2, float o2, int t2, float c3, float o3, int t3, float c4, float o4, int t4) =>
     bool diverge1 = settings.psp_sym1_use and not na(c1) and not na(o1) and t1 == candleTime and (bull != (c1 > o1))
     bool diverge2 = settings.psp_sym2_use and not na(c2) and not na(o2) and t2 == candleTime and (bull != (c2 > o2))
@@ -1069,47 +1058,20 @@ PSPColor(bool bull, int candleTime, float c1, float o1, int t1, float c2, float 
     color bodyCol = bull ? settings.psp_up_body : settings.psp_down_body
     [isPSP, bodyCol]
 
-// SMT TF Color and Enable Mapping
-getSMTConfig(string tf) =>
-    int smtTfSeconds = timeframe.in_seconds(tf)
-    bool enabled = false
-    color col = color.gray
-
-    if smtTfSeconds == 900
-        enabled := smt_en_15m
-        col := smt_col_15m
-    else if smtTfSeconds == 1800
-        enabled := smt_en_30m
-        col := smt_col_30m
-    else if smtTfSeconds == 3600
-        enabled := smt_en_1h
-        col := smt_col_1h
-    else if smtTfSeconds == 5400
-        enabled := smt_en_90m
-        col := smt_col_90m
-    else if smtTfSeconds == 14400
-        enabled := smt_en_4h
-        col := smt_col_4h
-    else if smtTfSeconds == 21600
-        enabled := smt_en_6h
-        col := smt_col_6h
-    else if smtTfSeconds == 25200
-        enabled := smt_en_7h
-        col := smt_col_7h
-    else if tf == "D" or tf == "1D"
-        enabled := smt_en_1d
-        col := smt_col_1d
-    else if tf == "W" or tf == "1W"
-        enabled := smt_en_1w
-        col := smt_col_1w
-    else if tf == "M" or tf == "1M"
-        enabled := smt_en_1m
-        col := smt_col_1m
-    else if tf == "3M"
-        enabled := smt_en_3m
-        col := smt_col_3m
-
-    [enabled, col]
+// SMT timeframe enable: all nine user-selected timeframes.
+getSMTEnabled(string tf) =>
+    int s = timeframe.in_seconds(tf)
+    switch s
+        900     => smt_en_15m
+        1800    => smt_en_30m
+        3600    => smt_en_1h
+        5400    => smt_en_90m
+        14400   => smt_en_4h
+        21600   => smt_en_6h
+        25200   => smt_en_7h
+        86400   => smt_en_1d
+        604800  => smt_en_1w
+        => false
 
 // Methods
 method HTFEnabled(CandleSet htf1, CandleSet htf2, CandleSet htf3) =>
@@ -1284,9 +1246,12 @@ f_exactPeak(int startIdx, int endIdx, bool wantHigh, int fbIdx, float fbPx) =>
                 bestPx := px
     [bestIdx, bestPx]
 
+// HTF-panel sweeps + SMT, plus compact chart SMT labels for enabled HTF slots.
+// Chart SMT text is written at the middle of the line:
+//   BULLISH = above the line, BEARISH = below the line.
 method DrawSweepAndSMT(CandleSet candleSet) =>
     if (barstate.isrealtime or barstate.islast) and candleSet.candles.size() >= 2
-        [tfEnabled, tfSmtColor] = getSMTConfig(candleSet.settings.htf)
+        bool tfEnabled = getSMTEnabled(candleSet.settings.htf)
         color sweepColor = settings.sweep_color
         int sz = candleSet.candles.size()
         for i = 0 to sz - 2
@@ -1349,47 +1314,36 @@ method DrawSweepAndSMT(CandleSet candleSet) =>
 
                 bool bearishSMT = divLabelsUp != ""
                 bool bullishSMT = divLabelsDown != ""
-                bool filterPass = true
-                if settings.followAutoHTFFilter
-                    bool isBullCandle = B.c > B.o
-                    if bearishSMT and isBullCandle
-                        filterPass := false
-                    if bullishSMT and not isBullCandle
-                        filterPass := false
 
                 // Chart-bar ranges that belong to candle A and candle B
                 int aEnd = B.bar_idx - 1
                 int bEnd = i == 0 ? bar_index : candleSet.candles.get(i - 1).bar_idx - 1
 
-                if filterPass
-                    if bearishSMT
-                        hasSMT := true
-                        if settings.showHTFSMT
-                            B.smt_high_line := line.new(A_cx, A.h, B_cx, B.h, xloc=xloc.bar_index, color=cleanSMTColor, width=div_line_width, style=LineStyle(div_line_style))
-                        if settings.showChartSMT
-                            [aHiIdx, aHiPx] = f_exactPeak(A.bar_idx, aEnd, true, A.high_bar_idx, A.h)
-                            [bHiIdx, bHiPx] = f_exactPeak(B.bar_idx, bEnd, true, B.high_bar_idx, B.h)
-                            ln = line.new(aHiIdx, aHiPx, bHiIdx, bHiPx, xloc=xloc.bar_index, color=cleanSMTColor, width=div_line_width, style=LineStyle(div_line_style))
-                            array.push(chartSmtLines, ln)
-                            lbl = label.new(int(math.round((aHiIdx + bHiIdx) / 2)), (aHiPx + bHiPx) / 2, HTFName(candleSet.settings.htf), xloc=xloc.bar_index, style=label.style_none, textcolor=smt_text_col, size=size.tiny)
-                            array.push(chartSmtLabels, lbl)
-                        if settings.smt_label_show and not bullishSMT
-                            B.smt_label := label.new(B_cx, B.h, str.trim(divLabelsUp), xloc=xloc.bar_index, style=label.style_label_down, color=color_transparent, textcolor=smt_text_col, size=size.tiny)
+                if bearishSMT
+                    hasSMT := true
+                    if settings.showHTFSMT
+                        B.smt_high_line := line.new(A_cx, A.h, B_cx, B.h, xloc=xloc.bar_index, color=cleanSMTColor, width=div_line_width, style=LineStyle(div_line_style))
+                    if settings.showChartSMT
+                        [aHiIdx, aHiPx] = f_exactPeak(A.bar_idx, aEnd, true, A.high_bar_idx, A.h)
+                        [bHiIdx, bHiPx] = f_exactPeak(B.bar_idx, bEnd, true, B.high_bar_idx, B.h)
+                        ln = line.new(aHiIdx, aHiPx, bHiIdx, bHiPx, xloc=xloc.bar_index, color=cleanSMTColor, width=div_line_width, style=LineStyle(div_line_style))
+                        array.push(chartSmtLines, ln)
+                        string bearTxt = "SMT " + HTFName(candleSet.settings.htf) + (settings.smt_label_show ? " · " + str.trim(divLabelsUp) : "")
+                        lbl = label.new(int(math.round((aHiIdx + bHiIdx) / 2)), (aHiPx + bHiPx) / 2, bearTxt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_down, color=color.new(color.black, 100), textcolor=color.rgb(0, 0, 0), size=size.tiny)
+                        array.push(chartSmtLabels, lbl)
 
-                    if bullishSMT
-                        hasSMT := true
-                        if settings.showHTFSMT
-                            B.smt_low_line := line.new(A_cx, A.l, B_cx, B.l, xloc=xloc.bar_index, color=cleanSMTColor, width=div_line_width, style=LineStyle(div_line_style))
-                        if settings.showChartSMT
-                            [aLoIdx, aLoPx] = f_exactPeak(A.bar_idx, aEnd, false, A.low_bar_idx, A.l)
-                            [bLoIdx, bLoPx] = f_exactPeak(B.bar_idx, bEnd, false, B.low_bar_idx, B.l)
-                            ln = line.new(aLoIdx, aLoPx, bLoIdx, bLoPx, xloc=xloc.bar_index, color=cleanSMTColor, width=div_line_width, style=LineStyle(div_line_style))
-                            array.push(chartSmtLines, ln)
-                            lbl = label.new(int(math.round((aLoIdx + bLoIdx) / 2)), (aLoPx + bLoPx) / 2, HTFName(candleSet.settings.htf), xloc=xloc.bar_index, style=label.style_none, textcolor=smt_text_col, size=size.tiny)
-                            array.push(chartSmtLabels, lbl)
-                        if settings.smt_label_show
-                            string combinedText = bearishSMT and str.trim(divLabelsUp) != "" ? str.trim(divLabelsUp) + " / " + str.trim(divLabelsDown) : str.trim(divLabelsDown)
-                            B.smt_label := label.new(B_cx, B.l, combinedText, xloc=xloc.bar_index, style=label.style_label_up, color=color_transparent, textcolor=smt_text_col, size=size.tiny)
+                if bullishSMT
+                    hasSMT := true
+                    if settings.showHTFSMT
+                        B.smt_low_line := line.new(A_cx, A.l, B_cx, B.l, xloc=xloc.bar_index, color=cleanSMTColor, width=div_line_width, style=LineStyle(div_line_style))
+                    if settings.showChartSMT
+                        [aLoIdx, aLoPx] = f_exactPeak(A.bar_idx, aEnd, false, A.low_bar_idx, A.l)
+                        [bLoIdx, bLoPx] = f_exactPeak(B.bar_idx, bEnd, false, B.low_bar_idx, B.l)
+                        ln = line.new(aLoIdx, aLoPx, bLoIdx, bLoPx, xloc=xloc.bar_index, color=cleanSMTColor, width=div_line_width, style=LineStyle(div_line_style))
+                        array.push(chartSmtLines, ln)
+                        string bullTxt = "SMT " + HTFName(candleSet.settings.htf) + (settings.smt_label_show ? " · " + str.trim(divLabelsDown) : "")
+                        lbl = label.new(int(math.round((aLoIdx + bLoIdx) / 2)), (aLoPx + bLoPx) / 2, bullTxt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_up, color=color.new(color.black, 100), textcolor=color.rgb(0, 0, 0), size=size.tiny)
+                        array.push(chartSmtLabels, lbl)
 
             if settings.sweep_show and not hasSMT
                 if B.h > A.h
@@ -1585,13 +1539,12 @@ settings.psp_sym2_use := settings.psp_sym2_use and not SameInstrument(settings.p
 settings.psp_sym3_use := settings.psp_sym3_use and not SameInstrument(settings.psp_sym3)
 settings.psp_sym4_use := settings.psp_sym4_use and not SameInstrument(settings.psp_sym4)
 
-[autoTf1, autoTf2, autoTf3] = AutoHTF()
-htf1.settings.htf := settings.auto_htf ? autoTf1 : htf_1
-htf2.settings.htf := settings.auto_htf ? autoTf2 : htf_2
-htf3.settings.htf := settings.auto_htf ? autoTf3 : htf_3
-htf1.settings.max_display := settings.auto_count ? 6 : maxDisp1
-htf2.settings.max_display := settings.auto_count ? 6 : maxDisp2
-htf3.settings.max_display := settings.auto_count ? 8 : maxDisp3
+htf1.settings.htf := htf_1
+htf2.settings.htf := htf_2
+htf3.settings.htf := htf_3
+htf1.settings.max_display := htfCnt1
+htf2.settings.max_display := htfCnt2
+htf3.settings.max_display := htfCnt3
 
 string effectiveHtf1 = timeframe.in_seconds(htf1.settings.htf) > timeframe.in_seconds() ? htf1.settings.htf : timeframe.period
 [sym1_o_1, sym1_c_1, sym1_h_1, sym1_l_1, sym1_t_1] = request.security(settings.psp_sym1, effectiveHtf1, [open, close, high, low, time], lookahead = barmerge.lookahead_on)
@@ -1772,20 +1725,12 @@ if htf3.candles.size() > 0
 plot(allHigh, title = '(internal) HTF scale anchor high', color = color.new(color.white, 100), display = display.pane)
 plot(allLow, title = '(internal) HTF scale anchor low', color = color.new(color.white, 100), display = display.pane)
 
-
 // ==========================================
-// XC2 CONSTANTS
+// XC2
 // ==========================================
-bool hideHTF = hideRC
-bool hideLTF = hideRC
-
-// Separator constants
 float sepTopPadding = 0.0
 float sepBottomPadding = 0.15
 
-// ==========================================
-// STYLE AND TIMEFRAME MAPPING
-// ==========================================
 rcStyle = switch rcStyleInput
     "Dotted" => line.style_dotted
     "Dashed" => line.style_dashed
@@ -1808,19 +1753,10 @@ bool isM30_M3 = tfSeconds == 180
 bool isM15_M1 = tfSeconds == 60
 
 bool supported = isW1_D1 or isW1_H4 or isD1_H1 or isH4_M15 or isH1_M5 or isM30_M3 or isM15_M1
-
-bool isHTF = isW1_D1 or isW1_H4 or isD1_H1 or isH4_M15
-bool isLTF = isH1_M5 or isM30_M3 or isM15_M1
-
-bool visible = supported and (isHTF ? not hideHTF : not hideLTF)
-
-string targetTF = isW1_D1 or isW1_H4 ? "W" : isD1_H1 ? "D" : isH4_M15 ? "240" : isH1_M5 ? "60" : isM30_M3 ? "30" : "15"
+bool visible = supported and not hideRC
 
 string tfLabel = isW1_D1 or isW1_H4 ? "1W" : isD1_H1 ? "1D" : isH4_M15 ? "4H" : isH1_M5 ? "1H" : isM30_M3 ? "30M" : "15M"
 
-// ==========================================
-// SINGLE XC2 DETECTION FUNCTION
-// ==========================================
 f_detect() =>
     bool bullSweep = low[1] < low[2]
     bool bearSweep = high[1] > high[2]
@@ -1843,20 +1779,6 @@ f_detect() =>
 
     [direction, level, time[2], time[1], time_close[1]]
 
-// ==========================================
-// LATEST CONFIRMED EVENT FUNCTION
-// ==========================================
-f_latest() =>
-    [direction, level, c1Time, c2Time, c2End] = f_detect()
-
-    int latestDirection = nz(ta.valuewhen(direction != 0, direction, 0), 0)
-    int latestTime = nz(ta.valuewhen(direction != 0, c2Time, 0), 0)
-
-    [latestDirection, latestTime]
-
-// ==========================================
-// MULTI-TIMEFRAME XC2 DATA
-// ==========================================
 [dirW, levelW, c1W, c2W, endW] = request.security(syminfo.tickerid, "W", f_detect(), lookahead=barmerge.lookahead_off)
 [dirD, levelD, c1D, c2D, endD] = request.security(syminfo.tickerid, "D", f_detect(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
 [dirH4, levelH4, c1H4, c2H4, endH4] = request.security(syminfo.tickerid, "240", f_detect(), lookahead=barmerge.lookahead_off)
@@ -1897,9 +1819,6 @@ int c2End = isW1_D1 or isW1_H4 ? endW :
 bool bull = direction == 1
 bool bear = direction == -1
 
-// ==========================================
-// XC2 DRAWING
-// ==========================================
 var array<line> xc2Lines = array.new_line()
 var array<label> xc2Labels = array.new_label()
 var int lastC2 = na
@@ -1997,12 +1916,6 @@ if array.size(sepLabels) > 0
         if not na(currentLabel)
             label.set_y(currentLabel, chartTop)
 
-// ==========================================
-// ALERTS
-// ==========================================
-alertcondition(newXC2 and bull, title="Bullish XC2", message="Confirmed Bullish XC2 on {{ticker}}")
-alertcondition(newXC2 and bear, title="Bearish XC2", message="Confirmed Bearish XC2 on {{ticker}}")
-
 // ─────────────────────────────────────
 // SESSION OPENS (WO / DO / 00:00 / 9:30 / 10:00)
 // ─────────────────────────────────────
@@ -2014,13 +1927,10 @@ int labelPad = 0
 int keepDaily = showPrior ? 2 : 1
 int keepWeekly = showPrior ? 2 : 1
 
-int h = hour(time, tz)
-int m = minute(time, tz)
 int nyDow = dayofweek(time, tz)
 
 int dateNY = year(time, tz) * 10000 + month(time, tz) * 100 + dayofmonth(time, tz)
 
-// Detect opening time within the current chart candle
 isOpeningTime(int targetHour, int targetMinute) =>
     int targetTime = timestamp(
          "America/New_York",
@@ -2126,7 +2036,7 @@ if showWO and atWO and (na(lastWO) or lastWO != dateNY)
         freezeLevel(woLines)
 
     priceWO := open
-    createLevel(woLines, woLabels, priceWO, "WO", labelWO)
+    createLevel(woLines, woLabels, priceWO, "WO", showLvlLabels)
     lastWO := dateNY
 
 if showWO and array.size(woLines) > 0 and not na(priceWO)
@@ -2140,7 +2050,7 @@ if showDO and atDO and (na(lastDO) or lastDO != dateNY)
         freezeLevel(doLines)
 
     priceDO := open
-    createLevel(doLines, doLabels, priceDO, "DO", labelDO)
+    createLevel(doLines, doLabels, priceDO, "DO", showLvlLabels)
     lastDO := dateNY
 
 if showDO and array.size(doLines) > 0 and not na(priceDO)
@@ -2154,7 +2064,7 @@ if showMID and atMID and (na(lastMID) or lastMID != dateNY)
         freezeLevel(midLines)
 
     priceMID := open
-    createLevel(midLines, midLabels, priceMID, "00:00", labelMID)
+    createLevel(midLines, midLabels, priceMID, "00:00", showLvlLabels)
     lastMID := dateNY
 
 if showMID and array.size(midLines) > 0 and not na(priceMID)
@@ -2168,7 +2078,7 @@ if showNY and atNY and (na(lastNY) or lastNY != dateNY)
         freezeLevel(nyLines)
 
     priceNY := open
-    createLevel(nyLines, nyLabels, priceNY, "9:30", labelNY)
+    createLevel(nyLines, nyLabels, priceNY, "9:30", showLvlLabels)
     lastNY := dateNY
 
 if showNY and array.size(nyLines) > 0 and not na(priceNY)
@@ -2182,7 +2092,7 @@ if showTEN and atTEN and (na(lastTEN) or lastTEN != dateNY)
         freezeLevel(tenLines)
 
     priceTEN := open
-    createLevel(tenLines, tenLabels, priceTEN, "10:00", labelTEN)
+    createLevel(tenLines, tenLabels, priceTEN, "10:00", showLvlLabels)
     lastTEN := dateNY
 
 if showTEN and array.size(tenLines) > 0 and not na(priceTEN)
@@ -2193,8 +2103,6 @@ trimLevels(tenLines, tenLabels, keepDaily)
 // ═══════════════════════════════════════════════════════════════════════════
 // ▼▼▼ FRACTAL C2 / C3 / C4 + T-SPOT MODULE ▼▼▼
 // ═══════════════════════════════════════════════════════════════════════════
-
-// Fractal constants
 
 type FrSetup
     bool  isBull
@@ -2447,6 +2355,15 @@ fr_processC2(bool trigger, bool allow, bool isBull, float extremePrice, int extr
 bool fr_buyTrig  = fr_show and fr_periodChanged and fr_prevBuy
 bool fr_sellTrig = fr_show and fr_periodChanged and fr_prevSell
 
+// ALERT FLAGS — C4 phase begins on the next HTF period after a live C3 box
+bool fr_c4Buy  = false
+bool fr_c4Sell = false
+if fr_show and fr_periodChanged
+    if not na(fr_buy) and not fr_buy.dead and fr_buy.phase == 1 and not (fr_buyTrig and fr_allowBuy)
+        fr_c4Buy := true
+    if not na(fr_sell) and not fr_sell.dead and fr_sell.phase == 1 and not (fr_sellTrig and fr_allowSell)
+        fr_c4Sell := true
+
 fr_buy  := fr_processC2(fr_buyTrig,  fr_allowBuy,  true,  fr_pL, fr_pLBar, fr_buy)
 fr_sell := fr_processC2(fr_sellTrig, fr_allowSell, false, fr_pH, fr_pHBar, fr_sell)
 
@@ -2493,208 +2410,352 @@ if barstate.islast and fr_showTbl
     table.cell(fr_tbl, 0, 0, frTxt, text_color = fr_tblText, bgcolor = fr_tblBg, text_size = size.small, text_halign = text.align_left)
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ▼▼▼ FVG MTF MODULE ▼▼▼
+// ▼▼▼ SWING SMT ENGINE (chart timeframe, up to 4 correlated assets) ▼▼▼
+// Bullish text = above the line, Bearish text = below the line
 // ═══════════════════════════════════════════════════════════════════════════
 
+float smtTol = smtTolTicks * syminfo.mintick
 
-// FVG constants
+[smtB1h, smtB1l] = request.security(settings.psp_sym1, timeframe.period, [high, low], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+[smtB2h, smtB2l] = request.security(settings.psp_sym2, timeframe.period, [high, low], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+[smtB3h, smtB3l] = request.security(settings.psp_sym3, timeframe.period, [high, low], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+[smtB4h, smtB4l] = request.security(settings.psp_sym4, timeframe.period, [high, low], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
 
-var array<box>   fvg_box  = array.new_box()
-var array<float> fvg_top  = array.new_float()
-var array<float> fvg_bot  = array.new_float()
-var array<int>   fvg_bar  = array.new_int()
-var array<bool>  fvg_bull = array.new_bool()
-var array<int>   fvg_sec  = array.new_int()
+array<float>  smtBHi   = array.from(smtB1h[1], smtB2h[1], smtB3h[1], smtB4h[1])
+array<float>  smtBLo   = array.from(smtB1l[1], smtB2l[1], smtB3l[1], smtB4l[1])
+array<bool>   smtUse   = array.from(settings.psp_sym1_use, settings.psp_sym2_use, settings.psp_sym3_use, settings.psp_sym4_use)
+array<bool>   smtInvA  = array.from(smtInv1, smtInv2, smtInv3, smtInv4)
+array<string> smtNames = array.from(ShortTicker(settings.psp_sym1), ShortTicker(settings.psp_sym2), ShortTicker(settings.psp_sym3), ShortTicker(settings.psp_sym4))
 
-// Frozen (mitigated) FVGs follow the ATR distance rule
-var array<box>   fz_box = array.new_box()
-var array<float> fz_top = array.new_float()
-var array<float> fz_bot = array.new_float()
-var array<int>   fz_sec = array.new_int()
-var array<bool>  fz_bull = array.new_bool()
+var float smtPrevHiA    = na
+var int   smtPrevHiBarA = na
+var float smtPrevLoA    = na
+var int   smtPrevLoBarA = na
+var array<float> smtPrevHiB = array.new_float(4, na)
+var array<float> smtPrevLoB = array.new_float(4, na)
+var array<line>  smtLines   = array.new_line()
+var array<label> smtLabels  = array.new_label()
 
-int fvg_barMs = timeframe.in_seconds() * 1000
-int fvg_s1 = timeframe.in_seconds(fvg_tf1)
-int fvg_s2 = timeframe.in_seconds(fvg_tf2)
-int fvg_s3 = timeframe.in_seconds(fvg_tf3)
+bool bearSMT = false
+bool bullSMT = false
 
-// true only on the chart bar that closes a candle of that FVG timeframe
-bool fvg_cl1 = not na(time_close(fvg_tf1)) and time_close(fvg_tf1) == time_close
-bool fvg_cl2 = not na(time_close(fvg_tf2)) and time_close(fvg_tf2) == time_close
-bool fvg_cl3 = not na(time_close(fvg_tf3)) and time_close(fvg_tf3) == time_close
+if smtEnable and smtSwingOn and getSMTEnabled(timeframe.period) and barstate.isconfirmed
+    bool swingHi = high[1] > high[0] and high[1] > high[2]
+    bool swingLo = low[1]  < low[0]  and low[1]  < low[2]
 
-fvg_closing(int sec) =>
-    sec == fvg_s1 ? fvg_cl1 : sec == fvg_s2 ? fvg_cl2 : fvg_cl3
+    // ── Swing HIGH → bearish SMT (text below the line) ──
+    if swingHi
+        float aHi    = high[1]
+        int   aHiBar = bar_index - 1
+        if not na(smtPrevHiA) and aHi > smtPrevHiA + smtTol
+            int divCnt = 0
+            string divNames = ""
+            for k = 0 to 3
+                float bNow  = smtBHi.get(k)
+                float bPrev = smtPrevHiB.get(k)
+                if smtUse.get(k) and not na(bNow) and not na(bPrev)
+                    bool bMadeHigh = bNow > bPrev
+                    bool diverges = smtInvA.get(k) ? bMadeHigh : not bMadeHigh
+                    if diverges
+                        divCnt += 1
+                        divNames += (divNames == "" ? "" : " ") + smtNames.get(k)
+            if divCnt >= smtMinAssets
+                bearSMT := true
+                line ln = line.new(smtPrevHiBarA, smtPrevHiA, aHiBar, aHi, color = smtBearCol, style = LineStyle(div_line_style), width = math.max(div_line_width, 1))
+                label lb = label.new(int(math.round((smtPrevHiBarA + aHiBar) / 2)), (smtPrevHiA + aHi) / 2, "SMT " + HTFName(timeframe.period) + (smt_label_show ? " · " + divNames : ""), yloc = yloc.price, style = label.style_label_up, color = color_transparent, textcolor = smt_text_col, size = size.tiny)
+                array.push(smtLines, ln)
+                array.push(smtLabels, lb)
+        smtPrevHiA := aHi
+        smtPrevHiBarA := aHiBar
+        for k = 0 to 3
+            if not na(smtBHi.get(k))
+                smtPrevHiB.set(k, smtBHi.get(k))
 
-float fvg_dAtr = request.security(syminfo.tickerid, "D", ta.atr(14)[1], lookahead = barmerge.lookahead_on)
+    // ── Swing LOW → bullish SMT (text above the line) ──
+    if swingLo
+        float aLo    = low[1]
+        int   aLoBar = bar_index - 1
+        if not na(smtPrevLoA) and aLo < smtPrevLoA - smtTol
+            int divCntL = 0
+            string divNamesL = ""
+            for k = 0 to 3
+                float bNowL  = smtBLo.get(k)
+                float bPrevL = smtPrevLoB.get(k)
+                if smtUse.get(k) and not na(bNowL) and not na(bPrevL)
+                    bool bMadeLow = bNowL < bPrevL
+                    bool divergesL = smtInvA.get(k) ? bMadeLow : not bMadeLow
+                    if divergesL
+                        divCntL += 1
+                        divNamesL += (divNamesL == "" ? "" : " ") + smtNames.get(k)
+            if divCntL >= smtMinAssets
+                bullSMT := true
+                line lnL = line.new(smtPrevLoBarA, smtPrevLoA, aLoBar, aLo, color = smtBullCol, style = LineStyle(div_line_style), width = math.max(div_line_width, 1))
+                label lbL = label.new(int(math.round((smtPrevLoBarA + aLoBar) / 2)), (smtPrevLoA + aLo) / 2, "SMT " + HTFName(timeframe.period) + (smt_label_show ? " · " + divNamesL : ""), yloc = yloc.price, style = label.style_label_down, color = color_transparent, textcolor = smt_text_col, size = size.tiny)
+                array.push(smtLines, lnL)
+                array.push(smtLabels, lbL)
+        smtPrevLoA := aLo
+        smtPrevLoBarA := aLoBar
+        for k = 0 to 3
+            if not na(smtBLo.get(k))
+                smtPrevLoB.set(k, smtBLo.get(k))
 
-fvg_tfLabel(string tf) =>
-    int sec = timeframe.in_seconds(tf)
-    string s = ""
-    if sec < 3600
-        s := str.tostring(int(sec / 60)) + "m"
-    else if sec < 86400
-        s := str.tostring(int(sec / 3600)) + "H"
-    else if sec >= 86400 * 28
-        s := "M"
-    else if sec >= 604800
-        s := "W"
-    else
-        s := "D"
-    s
+    while array.size(smtLines) > smtMax
+        line.delete(array.shift(smtLines))
+        label.delete(array.shift(smtLabels))
 
-fvg_tfOn(int sec) =>
-    bool on = true
-    if sec == fvg_s1
-        on := fvg_show1
-    else if sec == fvg_s2
-        on := fvg_show2
-    else if sec == fvg_s3
-        on := fvg_show3
-    on
+// ═══════════════════════════════════════════════════════════════════════════
+// ▼▼▼ SSMT ENGINE (two consecutive CLOSED HTF candles) ▼▼▼
+// Chart asset takes the previous closed candle's high/low by more than the
+// tolerance; enough correlated assets fail to confirm (inverse-aware).
+// Evaluated ONLY on the first bar of the new HTF candle -> no repaint.
+// Reuses the swing-SMT security calls above (0 extra request.security).
+// Bearish text below the line, bullish text above (same as swing SMT).
+// ═══════════════════════════════════════════════════════════════════════════
 
-fvg_isMitigated(bool isBull, float gTop, float gBot, string mode, int sec) =>
-    bool m = false
-    if mode == FVG_MIT_WICK
-        m := isBull ? low <= gTop : high >= gBot
-    else if mode == FVG_MIT_FULL
-        m := isBull ? low <= gBot : high >= gTop
-    else
-        bool inside = close >= gBot and close <= gTop
-        bool beyond = isBull ? close < gBot : close > gTop
-        // judged only when a candle of the FVG's own timeframe closes
-        m := fvg_closing(sec) and (inside or beyond)
-    m
+var array<line>  ssmtLines  = array.new_line()
+var array<label> ssmtLabels = array.new_label()
 
-fvg_isNear(float gTop, float gBot) =>
+array<float> ssmtBH = array.from(smtB1h, smtB2h, smtB3h, smtB4h)
+array<float> ssmtBL = array.from(smtB1l, smtB2l, smtB3l, smtB4l)
+array<bool> ssmtInvA = array.from(ssmtInv1, ssmtInv2, ssmtInv3, ssmtInv4)
+float ssmtTol = ssmtTolTicks * syminfo.mintick
+
+ssmtScan(string tf, string tfTxt, bool enabled) =>
+    // chart asset registers: P = previous closed, C = last closed, R = forming
+    var float aPH = na
+    var float aPL = na
+    var int   aPHb = na
+    var int   aPLb = na
+    var float aCH = na
+    var float aCL = na
+    var int   aCHb = na
+    var int   aCLb = na
+    var float aRH = na
+    var float aRL = na
+    var int   aRHb = na
+    var int   aRLb = na
+    var int   rT = na
+    var array<float> bPH = array.new_float(4, na)
+    var array<float> bPL = array.new_float(4, na)
+    var array<float> bCH = array.new_float(4, na)
+    var array<float> bCL = array.new_float(4, na)
+    var array<float> bRH = array.new_float(4, na)
+    var array<float> bRL = array.new_float(4, na)
+
+    bool bullOut = false
+    bool bearOut = false
+    int htfT = time(tf)
+    bool valid = enabled and not na(htfT) and timeframe.in_seconds(tf) > timeframe.in_seconds()
+
+    if valid
+        bool isNew = na(rT) or htfT != rT
+        if isNew
+            // shift registers: last closed becomes previous, forming becomes last closed
+            aPH := aCH
+            aPL := aCL
+            aPHb := aCHb
+            aPLb := aCLb
+            aCH := aRH
+            aCL := aRL
+            aCHb := aRHb
+            aCLb := aRLb
+            for k = 0 to 3
+                bPH.set(k, bCH.get(k))
+                bPL.set(k, bCL.get(k))
+                bCH.set(k, bRH.get(k))
+                bCL.set(k, bRL.get(k))
+                bRH.set(k, ssmtBH.get(k))
+                bRL.set(k, ssmtBL.get(k))
+            aRH := high
+            aRL := low
+            aRHb := bar_index
+            aRLb := bar_index
+            rT := htfT
+        else
+            if high > aRH
+                aRH := high
+                aRHb := bar_index
+            if low < aRL
+                aRL := low
+                aRLb := bar_index
+            for k = 0 to 3
+                float bh = ssmtBH.get(k)
+                float bl = ssmtBL.get(k)
+                if not na(bh)
+                    bRH.set(k, na(bRH.get(k)) ? bh : math.max(bRH.get(k), bh))
+                if not na(bl)
+                    bRL.set(k, na(bRL.get(k)) ? bl : math.min(bRL.get(k), bl))
+
+        // detect only on the boundary bar (previous HTF candle just closed)
+        if isNew and barstate.isconfirmed and not na(aPH) and not na(aCH) and not na(aPL) and not na(aCL)
+            // ── bearish: chart asset took the previous high ──
+            if aCH > aPH + ssmtTol
+                int ssCnt = 0
+                string ssNm = ""
+                for k = 0 to 3
+                    float bc = bCH.get(k)
+                    float bp = bPH.get(k)
+                    if smtUse.get(k) and not na(bc) and not na(bp)
+                        bool made = bc > bp
+                        bool dv = ssmtInvA.get(k) ? made : not made
+                        if dv
+                            ssCnt += 1
+                            ssNm += (ssNm == "" ? "" : " ") + smtNames.get(k)
+                if ssCnt >= ssmtMinAssets
+                    bearOut := true
+                    line ssLn = line.new(aPHb, aPH, aCHb, aCH, color = ssmtBearCol, style = ssmt_line_style == "Solid" ? line.style_solid : ssmt_line_style == "Dashed" ? line.style_dashed : line.style_dotted, width = ssmt_line_width)
+                    label ssLb = label.new(int(math.round((aPHb + aCHb) / 2)), (aPH + aCH) / 2, "SSMT " + tfTxt + (ssmt_label_show ? " · " + ssNm : ""), yloc = yloc.price, style = label.style_label_up, color = color_transparent, textcolor = ssmt_text_col, size = size.small)
+                    array.push(ssmtLines, ssLn)
+                    array.push(ssmtLabels, ssLb)
+            // ── bullish: chart asset took the previous low ──
+            if aCL < aPL - ssmtTol
+                int ssCntL = 0
+                string ssNmL = ""
+                for k = 0 to 3
+                    float bcL = bCL.get(k)
+                    float bpL = bPL.get(k)
+                    if smtUse.get(k) and not na(bcL) and not na(bpL)
+                        bool madeL = bcL < bpL
+                        bool dvL = ssmtInvA.get(k) ? madeL : not madeL
+                        if dvL
+                            ssCntL += 1
+                            ssNmL += (ssNmL == "" ? "" : " ") + smtNames.get(k)
+                if ssCntL >= ssmtMinAssets
+                    bullOut := true
+                    line ssLnL = line.new(aPLb, aPL, aCLb, aCL, color = ssmtBullCol, style = ssmt_line_style == "Solid" ? line.style_solid : ssmt_line_style == "Dashed" ? line.style_dashed : line.style_dotted, width = ssmt_line_width)
+                    label ssLbL = label.new(int(math.round((aPLb + aCLb) / 2)), (aPL + aCL) / 2, "SSMT " + tfTxt + (ssmt_label_show ? " · " + ssNmL : ""), yloc = yloc.price, style = label.style_label_down, color = color_transparent, textcolor = ssmt_text_col, size = size.small)
+                    array.push(ssmtLines, ssLnL)
+                    array.push(ssmtLabels, ssLbL)
+            while array.size(ssmtLines) > ssmtMax
+                line.delete(array.shift(ssmtLines))
+                label.delete(array.shift(ssmtLabels))
+    [bullOut, bearOut]
+
+[ssBull15, ssBear15] = ssmtScan("15",  "15m", ssmtOn and ssmt_en_15m)
+[ssBull30, ssBear30] = ssmtScan("30",  "30m", ssmtOn and ssmt_en_30m)
+[ssBull1h, ssBear1h] = ssmtScan("60",  "1H",  ssmtOn and ssmt_en_1h)
+[ssBull90, ssBear90] = ssmtScan("90",  "90m", ssmtOn and ssmt_en_90m)
+[ssBull4h, ssBear4h] = ssmtScan("240", "4H",  ssmtOn and ssmt_en_4h)
+[ssBull6h, ssBear6h] = ssmtScan("360", "6H",  ssmtOn and ssmt_en_6h)
+[ssBull7h, ssBear7h] = ssmtScan("420", "7H",  ssmtOn and ssmt_en_7h)
+[ssBull1d, ssBear1d] = ssmtScan("D",   "1D",  ssmtOn and ssmt_en_1d)
+[ssBull1w, ssBear1w] = ssmtScan("W",   "1W",  ssmtOn and ssmt_en_1w)
+
+bool bullSSMT = ssBull15 or ssBull30 or ssBull1h or ssBull90 or ssBull4h or ssBull6h or ssBull7h or ssBull1d or ssBull1w
+bool bearSSMT = ssBear15 or ssBear30 or ssBear1h or ssBear90 or ssBear4h or ssBear6h or ssBear7h or ssBear1d or ssBear1w
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ▼▼▼ FVG ENGINE (30m / 1H / 4H, separate settings per timeframe) ▼▼▼
+// ═══════════════════════════════════════════════════════════════════════════
+
+var array<box>   fvgBoxes = array.new_box()
+var array<line>  fvgCEs   = array.new_line()
+var array<float> fvgTop   = array.new_float()
+var array<float> fvgBot   = array.new_float()
+var array<int>   fvgDir   = array.new_int()
+var array<int>   fvgBorn  = array.new_int()
+var array<int>   fvgSec   = array.new_int()
+var array<bool>  fvgDone  = array.new_bool()
+
+bool bullFVG = false
+bool bearFVG = false
+bool fvgMitHit = false
+int fvgSC = timeframe.in_seconds()
+int fvgBarMs = fvgSC * 1000
+// Previous confirmed daily ATR, shared by 30m / 1H / 4H FVGs.
+float fvgDailyAtr = request.security(syminfo.tickerid, "D", ta.atr(14)[1], lookahead = barmerge.lookahead_on)
+
+string fvgTfA = "30"
+string fvgTfB = "60"
+string fvgTfC = "240"
+int fvgSA = 1800
+int fvgSB = 3600
+int fvgSC3 = 14400
+
+bool fvgClA = not na(time_close(fvgTfA)) and time_close(fvgTfA) == time_close
+bool fvgClB = not na(time_close(fvgTfB)) and time_close(fvgTfB) == time_close
+bool fvgClC = not na(time_close(fvgTfC)) and time_close(fvgTfC) == time_close
+
+// per-timeframe setting pickers
+fvgClosing(int sec) =>
+    sec == fvgSA ? fvgClA : sec == fvgSB ? fvgClB : fvgClC
+
+fvgTfLabel(int sec) =>
+    sec == 1800 ? "30m" : sec == 3600 ? "1H" : "4H"
+
+fvgBullColOf(int sec) =>
+    sec == 1800 ? fvgBull30 : sec == 3600 ? fvgBull60 : fvgBull240
+
+fvgBearColOf(int sec) =>
+    sec == 1800 ? fvgBear30 : sec == 3600 ? fvgBear60 : fvgBear240
+
+fvgMitOf(int sec) =>
+    sec == 1800 ? fvgMit30 : sec == 3600 ? fvgMit60 : fvgMit240
+
+fvgKillOf(int sec) =>
+    sec == 1800 ? fvgKill30 : sec == 3600 ? fvgKill60 : fvgKill240
+
+fvgMinOf(int sec) =>
+    (sec == 1800 ? fvgMin30 : sec == 3600 ? fvgMin60 : fvgMin240) * syminfo.mintick
+
+fvgLblOf(int sec) =>
+    sec == 1800 ? fvgLbl30 : sec == 3600 ? fvgLbl60 : fvgLbl240
+
+fvgEnabledOf(int sec) =>
+    sec == 1800 ? fvgShow30 : sec == 3600 ? fvgShow60 : fvgShow240
+
+fvgIsNear(float gTop, float gBot) =>
     float dist = close > gTop ? close - gTop : close < gBot ? gBot - close : 0.0
-    fvg_maxDistAtr <= 0 or na(fvg_dAtr) or dist <= fvg_maxDistAtr * fvg_dAtr
+    not fvgAtrVisible or fvgMaxDistAtr <= 0 or na(fvgDailyAtr) or dist <= fvgMaxDistAtr * fvgDailyAtr
 
-fvg_overlapsExisting(bool isBull, float gTop, float gBot, int sec) =>
+fvgDistOf(float gTop, float gBot) =>
+    close > gTop ? close - gTop : close < gBot ? gBot - close : 0.0
+
+fvgOverlaps(bool isBull, float gTop, float gBot, int sec) =>
     bool hit = false
-    int n = array.size(fvg_box)
+    int n = array.size(fvgBoxes)
     if n > 0
         for i = 0 to n - 1
-            int eSec = array.get(fvg_sec, i)
-            if array.get(fvg_bull, i) == isBull and eSec >= sec and fvg_tfOn(eSec) and gBot < array.get(fvg_top, i) and gTop > array.get(fvg_bot, i)
+            if not array.get(fvgDone, i) and array.get(fvgDir, i) == (isBull ? 1 : -1) and array.get(fvgSec, i) >= sec and gBot < array.get(fvgTop, i) and gTop > array.get(fvgBot, i)
                 hit := true
     hit
 
-fvg_extendBox(box b) =>
-    if box.get_right(b) <= time
-        box.set_right(b, time + fvg_extBars * fvg_barMs)
-
-fvg_addFvg(bool isBull, float gTop, float gBot, int leftTime, string tfTxt, int tfSec) =>
-    bool bigEnough = (gTop - gBot) >= fvg_minGapAtr * nz(fvg_dAtr, 0.0)
-    bool dup       = fvg_noOverlap and fvg_overlapsExisting(isBull, gTop, gBot, tfSec)
-    if bigEnough and not dup
-        color c  = isBull ? fvg_bullCol : fvg_bearCol
-        bool  on = fvg_showAll and fvg_tfOn(tfSec)
-        box b = box.new(leftTime, gTop, time + fvg_extBars * fvg_barMs, gBot,
-             xloc = xloc.bar_time,
-             border_color = on ? color.new(c, fvg_borderTr) : color(na),
-             bgcolor = on ? c : color(na),
-             text = fvg_showLabel ? "FVG (" + tfTxt + ")" : "",
+fvgAdd(bool isBull, float gTop, float gBot, int leftTime, int sec) =>
+    bool added = false
+    bool bigEnough = gTop > gBot and (gTop - gBot) >= math.max(fvgMinOf(sec), fvgMinGapAtr * nz(fvgDailyAtr, 0.0))
+    bool dup = fvgNoOverlap and fvgOverlaps(isBull, gTop, gBot, sec)
+    if bigEnough and not dup and not na(leftTime)
+        color c = isBull ? fvgBullColOf(sec) : fvgBearColOf(sec)
+        bool visibleNow = fvgOn and fvgEnabledOf(sec) and fvgIsNear(gTop, gBot)
+        int rightT = time + fvgExt * fvgBarMs
+        float mid = (gTop + gBot) / 2
+        box bx = box.new(leftTime, gTop, rightT, gBot, xloc = xloc.bar_time,
+             bgcolor = visibleNow ? c : color(na), border_color = visibleNow ? color.new(c, fvgBorderTr) : color(na), border_width = 1,
+             text = fvgLblOf(sec) ? "FVG (" + fvgTfLabel(sec) + ")" : "",
              text_halign = text.align_right, text_valign = text.align_center,
-             text_size = fvg_lblSize,
-             text_color = on ? color.new(c, fvg_lblTransp) : color(na))
-        array.push(fvg_box,  b)
-        array.push(fvg_top,  gTop)
-        array.push(fvg_bot,  gBot)
-        array.push(fvg_bar,  bar_index)
-        array.push(fvg_bull, isBull)
-        array.push(fvg_sec,  tfSec)
-        while array.size(fvg_box) > fvg_maxFvg
-            box.delete(array.shift(fvg_box))
-            array.shift(fvg_top)
-            array.shift(fvg_bot)
-            array.shift(fvg_bar)
-            array.shift(fvg_bull)
-            array.shift(fvg_sec)
+             text_size = fvgLblSize, text_color = visibleNow ? color.new(c, 0) : color(na))
+        line ce = fvgCE ? line.new(leftTime, mid, rightT, mid, xloc = xloc.bar_time, color = visibleNow ? color.new(c, 40) : color(na), style = line.style_dotted, width = 1) : na
+        array.push(fvgBoxes, bx)
+        array.push(fvgCEs, ce)
+        array.push(fvgTop, gTop)
+        array.push(fvgBot, gBot)
+        array.push(fvgDir, isBull ? 1 : -1)
+        array.push(fvgBorn, bar_index)
+        array.push(fvgSec, sec)
+        array.push(fvgDone, false)
+        while array.size(fvgBoxes) > fvgMax
+            box.delete(array.shift(fvgBoxes))
+            line.delete(array.shift(fvgCEs))
+            array.shift(fvgTop)
+            array.shift(fvgBot)
+            array.shift(fvgDir)
+            array.shift(fvgBorn)
+            array.shift(fvgSec)
+            array.shift(fvgDone)
+        added := true
+    added
 
-fvg_updateFrozen() =>
-    int n = array.size(fz_box)
-    if n > 0
-        for i = n - 1 to 0
-            box   b      = array.get(fz_box, i)
-            float gTop   = array.get(fz_top, i)
-            float gBot   = array.get(fz_bot, i)
-            bool  isBull = array.get(fz_bull, i)
-            bool  broken = isBull ? close < gBot : close > gTop
-            if broken
-                box.delete(b)
-                array.remove(fz_box,  i)
-                array.remove(fz_top,  i)
-                array.remove(fz_bot,  i)
-                array.remove(fz_sec,  i)
-                array.remove(fz_bull, i)
-            if not broken
-                bool vis = fvg_showAll and fvg_tfOn(array.get(fz_sec, i)) and fvg_isNear(gTop, gBot)
-                box.set_bgcolor(b, vis ? fvg_mitCol : color(na))
-                box.set_border_color(b, vis ? color.new(color.gray, 85) : color(na))
-                box.set_text_color(b, vis ? color.new(color.gray, 60) : color(na))
-    0
-
-// Confirmed-bar pass
-fvg_updateAll() =>
-    int nF = array.size(fvg_box)
-    if nF > 0
-        for i = nF - 1 to 0
-            box   b      = array.get(fvg_box, i)
-            bool  isBull = array.get(fvg_bull, i)
-            float gTop   = array.get(fvg_top, i)
-            float gBot   = array.get(fvg_bot, i)
-            int   gSec   = array.get(fvg_sec, i)
-            bool mit = bar_index > array.get(fvg_bar, i) and fvg_isMitigated(isBull, gTop, gBot, fvg_mitMode, gSec)
-            if mit
-                if fvg_mitDisplay == FVG_MD_DELETE
-                    box.delete(b)
-                else
-                    array.push(fz_box, b)
-                    array.push(fz_top, gTop)
-                    array.push(fz_bot, gBot)
-                    array.push(fz_sec, gSec)
-                    array.push(fz_bull, isBull)
-                    while array.size(fz_box) > 100
-                        box.delete(array.shift(fz_box))
-                        array.shift(fz_top)
-                        array.shift(fz_bot)
-                        array.shift(fz_sec)
-                        array.shift(fz_bull)
-                array.remove(fvg_box,  i)
-                array.remove(fvg_top,  i)
-                array.remove(fvg_bot,  i)
-                array.remove(fvg_bar,  i)
-                array.remove(fvg_bull, i)
-                array.remove(fvg_sec,  i)
-            if not mit
-                fvg_extendBox(b)
-                bool  vis  = fvg_showAll and fvg_tfOn(gSec) and fvg_isNear(gTop, gBot)
-                color c    = isBull ? fvg_bullCol : fvg_bearCol
-                box.set_bgcolor(b, vis ? c : color(na))
-                box.set_border_color(b, vis ? color.new(c, fvg_borderTr) : color(na))
-                box.set_text_color(b, vis ? color.new(c, fvg_lblTransp) : color(na))
-
-// Live-tick pass (visual only)
-fvg_liveTouch() =>
-    int nF = array.size(fvg_box)
-    if nF > 0
-        for i = 0 to nF - 1
-            if bar_index > array.get(fvg_bar, i) and fvg_isMitigated(array.get(fvg_bull, i), array.get(fvg_top, i), array.get(fvg_bot, i), fvg_mitMode, array.get(fvg_sec, i))
-                box b = array.get(fvg_box, i)
-                if fvg_mitDisplay == FVG_MD_DELETE
-                    box.set_bgcolor(b, color(na))
-                    box.set_border_color(b, color(na))
-                    box.set_text_color(b, color(na))
-                else
-                    box.set_right(b, time)
-                    bool vis = fvg_showAll and fvg_tfOn(array.get(fvg_sec, i)) and fvg_isNear(array.get(fvg_top, i), array.get(fvg_bot, i))
-                    box.set_bgcolor(b, vis ? fvg_mitCol : color(na))
-                    box.set_border_color(b, vis ? color.new(color.gray, 85) : color(na))
-                    box.set_text_color(b, vis ? color.new(color.gray, 60) : color(na))
-
-// Builds HTF candles from chart bars and marks the gap on the closing bar of candle C
-fvg_scan(string tf, string tfTxt) =>
+fvgScan(string tf, int tfSec, bool enabled) =>
     var float aH = na
     var float aL = na
     var int   aT = na
@@ -2704,11 +2765,9 @@ fvg_scan(string tf, string tfTxt) =>
     var float dH = na
     var float dL = na
     var int   dT = na
-
-    int  tfSec   = timeframe.in_seconds(tf)
-    bool tfOk    = tfSec >= timeframe.in_seconds()
-    int  htfOpen = time(tf)
-
+    bool bullAdd = false
+    bool bearAdd = false
+    int htfOpen = time(tf)
     if not na(htfOpen)
         if na(dT) or htfOpen != dT
             aH := bH
@@ -2723,23 +2782,173 @@ fvg_scan(string tf, string tfTxt) =>
         else
             dH := math.max(dH, high)
             dL := math.min(dL, low)
-
     bool lastBar = not na(htfOpen) and time_close(tf) == time_close
-
-    if tfOk and lastBar and barstate.isconfirmed
+    if enabled and tfSec > fvgSC and lastBar and barstate.isconfirmed
         if dL > aH
-            fvg_addFvg(true,  dL, aH, aT, tfTxt, tfSec)
+            bullAdd := fvgAdd(true, dL, aH, aT, tfSec)
         if dH < aL
-            fvg_addFvg(false, aL, dH, aT, tfTxt, tfSec)
-    lastBar
+            bearAdd := fvgAdd(false, aL, dH, aT, tfSec)
+    [bullAdd, bearAdd]
 
-// ───────────── ENGINE ─────────────
-if barstate.isconfirmed
-    fvg_updateAll()
-    fvg_updateFrozen()
-else if fvg_liveMit and fvg_mitMode != FVG_MIT_CLOSE
-    fvg_liveTouch()
+// ── Mitigation (each gap uses its own timeframe's rule) ──
+if fvgOn and barstate.isconfirmed
+    int idx = array.size(fvgBoxes) - 1
+    while idx >= 0
+        float gTop = array.get(fvgTop, idx)
+        float gBot = array.get(fvgBot, idx)
+        bool  isBullGap = array.get(fvgDir, idx) == 1
+        int   gSec = array.get(fvgSec, idx)
+        string mitRule = fvgMitOf(gSec)
+        bool  drop = false
+        if array.get(fvgDone, idx)
+            drop := isBullGap ? close < gBot : close > gTop
+        else if bar_index > array.get(fvgBorn, idx)
+            bool mit = false
+            if mitRule == FVG_MIT_WICK
+                mit := isBullGap ? low <= gTop : high >= gBot
+            else if mitRule == FVG_MIT_FULL
+                mit := isBullGap ? low <= gBot : high >= gTop
+            else
+                mit := fvgClosing(gSec) and (isBullGap ? close <= gTop : close >= gBot)
+            if mit
+                fvgMitHit := true
+                if fvgKillOf(gSec) or not fvgFreezeMit
+                    drop := true
+                else
+                    box  gb = array.get(fvgBoxes, idx)
+                    line gl = array.get(fvgCEs, idx)
+                    box.set_right(gb, time)
+                    box.set_bgcolor(gb, fvgMitCol)
+                    box.set_border_color(gb, color.new(color.gray, 85))
+                    box.set_text_color(gb, color.new(color.gray, 60))
+                    if not na(gl)
+                        line.set_x2(gl, time)
+                        line.set_color(gl, color.new(color.gray, 70))
+                    array.set(fvgDone, idx, true)
+        if drop
+            box.delete(array.get(fvgBoxes, idx))
+            line gd = array.get(fvgCEs, idx)
+            if not na(gd)
+                line.delete(gd)
+            array.remove(fvgBoxes, idx)
+            array.remove(fvgCEs, idx)
+            array.remove(fvgTop, idx)
+            array.remove(fvgBot, idx)
+            array.remove(fvgDir, idx)
+            array.remove(fvgBorn, idx)
+            array.remove(fvgSec, idx)
+            array.remove(fvgDone, idx)
+        idx -= 1
 
-fvg_scan(fvg_tf3, fvg_tfLabel(fvg_tf3))
-fvg_scan(fvg_tf2, fvg_tfLabel(fvg_tf2))
-fvg_scan(fvg_tf1, fvg_tfLabel(fvg_tf1))
+// ── Per-timeframe scans (each has its own on/off button) ──
+[fvgBullA, fvgBearA] = fvgScan(fvgTfA, fvgSA, fvgOn and fvgShow30)
+[fvgBullB, fvgBearB] = fvgScan(fvgTfB, fvgSB, fvgOn and fvgShow60)
+[fvgBullC, fvgBearC] = fvgScan(fvgTfC, fvgSC3, fvgOn and fvgShow240)
+bullFVG := fvgBullA or fvgBullB or fvgBullC
+bearFVG := fvgBearA or fvgBearB or fvgBearC
+
+// ── Refresh FVG visuals on every last-bar execution. ──
+// All timeframes use one daily ATR proximity filter; hidden zones remain tracked.
+// Tapped FVGs keep their frozen right boundary and are removed on full break.
+if barstate.islast
+    int nG = array.size(fvgBoxes)
+    if nG > 0
+        for i = 0 to nG - 1
+            box gb = array.get(fvgBoxes, i)
+            line gl = array.get(fvgCEs, i)
+            int sec = array.get(fvgSec, i)
+            bool done = array.get(fvgDone, i)
+            bool isBull = array.get(fvgDir, i) == 1
+            float top = array.get(fvgTop, i)
+            float bot = array.get(fvgBot, i)
+            bool vis = fvgOn and fvgEnabledOf(sec) and fvgIsNear(top, bot)
+            // hide a gap that sits inside an active higher-TF gap (same direction)
+            if vis and not done and fvgHideNested
+                for j = 0 to nG - 1
+                    if j != i and not array.get(fvgDone, j) and array.get(fvgDir, j) == array.get(fvgDir, i) and array.get(fvgSec, j) > sec and fvgEnabledOf(array.get(fvgSec, j))
+                        if bot < array.get(fvgTop, j) and top > array.get(fvgBot, j)
+                            vis := false
+                            break
+            // keep only the N nearest unmitigated gaps
+            if vis and not done and fvgMaxVisible > 0
+                float myDist = fvgDistOf(top, bot)
+                int closer = 0
+                for j = 0 to nG - 1
+                    if j != i and not array.get(fvgDone, j) and fvgEnabledOf(array.get(fvgSec, j))
+                        if fvgDistOf(array.get(fvgTop, j), array.get(fvgBot, j)) < myDist
+                            closer += 1
+                if closer >= fvgMaxVisible
+                    vis := false
+            color baseCol = isBull ? fvgBullColOf(sec) : fvgBearColOf(sec)
+            color boxCol = done ? fvgMitCol : baseCol
+            box.set_bgcolor(gb, vis ? boxCol : color(na))
+            box.set_border_color(gb, vis ? (done ? color.new(color.gray, 85) : color.new(baseCol, fvgBorderTr)) : color(na))
+            box.set_text_color(gb, vis ? (done ? color.new(color.gray, 60) : color.new(baseCol, 0)) : color(na))
+            if not done
+                box.set_right(gb, time + fvgExt * fvgBarMs)
+            if not na(gl)
+                line.set_color(gl, vis ? (done ? color.new(color.gray, 70) : color.new(baseCol, 40)) : color(na))
+                if not done
+                    line.set_x2(gl, time + fvgExt * fvgBarMs)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ▼▼▼ ALERTS ▼▼▼
+// Order: Any-signal → SMT / SSMT → CISD → FVG → XC2 → Fractal.
+// In TradingView: Create Alert → Condition = this indicator → pick one below.
+// Notes:
+//  • SMT swing alerts need "Swing SMT" ON. SSMT needs SSMT ON + a TF enabled.
+//  • CISD alerts need "Show CISD" ON.  Fractal alerts need "Show Fractal" ON.
+//  • Use "Once Per Bar Close" for every alert below (all are bar-close signals).
+//  • The Fractal C2 alert() call (settings §11 "Alerts on C2") is separate: create it
+//    with Condition = this indicator → "Any alert() function call".
+// ═══════════════════════════════════════════════════════════════════════════
+
+bool anyBullSMT = bullSMT or bullSSMT
+bool anyBearSMT = bearSMT or bearSSMT
+
+// ── Any-signal ──
+alertcondition(anyBullSMT or cisdBullConf or bullFVG or (newXC2 and bull) or (fr_buyTrig and fr_allowBuy),  title = "⭐ Any Bullish Signal", message = "Bullish signal (SMT/SSMT/CISD/FVG/XC2/C2) on {{ticker}} {{interval}}")
+alertcondition(anyBearSMT or cisdBearConf or bearFVG or (newXC2 and bear) or (fr_sellTrig and fr_allowSell), title = "⭐ Any Bearish Signal", message = "Bearish signal (SMT/SSMT/CISD/FVG/XC2/C2) on {{ticker}} {{interval}}")
+
+// ── SMT / SSMT ──
+alertcondition(anyBullSMT, title = "📊 Any SMT/SSMT Bull", message = "Bullish SMT/SSMT on {{ticker}} {{interval}}")
+alertcondition(anyBearSMT, title = "📊 Any SMT/SSMT Bear", message = "Bearish SMT/SSMT on {{ticker}} {{interval}}")
+alertcondition(bullSMT,    title = "SMT Bull (swing)",     message = "Bullish swing SMT on {{ticker}} {{interval}}")
+alertcondition(bearSMT,    title = "SMT Bear (swing)",     message = "Bearish swing SMT on {{ticker}} {{interval}}")
+alertcondition(bullSSMT,   title = "SSMT Bull (any TF)",   message = "Bullish SSMT on {{ticker}} {{interval}}")
+alertcondition(bearSSMT,   title = "SSMT Bear (any TF)",   message = "Bearish SSMT on {{ticker}} {{interval}}")
+alertcondition(ssBull15,   title = "SSMT Bull 15m",        message = "Bullish SSMT 15m on {{ticker}}")
+alertcondition(ssBear15,   title = "SSMT Bear 15m",        message = "Bearish SSMT 15m on {{ticker}}")
+alertcondition(ssBull30,   title = "SSMT Bull 30m",        message = "Bullish SSMT 30m on {{ticker}}")
+alertcondition(ssBear30,   title = "SSMT Bear 30m",        message = "Bearish SSMT 30m on {{ticker}}")
+alertcondition(ssBull1h,   title = "SSMT Bull 1H",         message = "Bullish SSMT 1H on {{ticker}}")
+alertcondition(ssBear1h,   title = "SSMT Bear 1H",         message = "Bearish SSMT 1H on {{ticker}}")
+alertcondition(ssBull90,   title = "SSMT Bull 90m",        message = "Bullish SSMT 90m on {{ticker}}")
+alertcondition(ssBear90,   title = "SSMT Bear 90m",        message = "Bearish SSMT 90m on {{ticker}}")
+alertcondition(ssBull4h,   title = "SSMT Bull 4H",         message = "Bullish SSMT 4H on {{ticker}}")
+alertcondition(ssBear4h,   title = "SSMT Bear 4H",         message = "Bearish SSMT 4H on {{ticker}}")
+alertcondition(ssBull6h,   title = "SSMT Bull 6H",         message = "Bullish SSMT 6H on {{ticker}}")
+alertcondition(ssBear6h,   title = "SSMT Bear 6H",         message = "Bearish SSMT 6H on {{ticker}}")
+alertcondition(ssBull7h,   title = "SSMT Bull 7H",         message = "Bullish SSMT 7H on {{ticker}}")
+alertcondition(ssBear7h,   title = "SSMT Bear 7H",         message = "Bearish SSMT 7H on {{ticker}}")
+alertcondition(ssBull1d,   title = "SSMT Bull 1D",         message = "Bullish SSMT 1D on {{ticker}}")
+alertcondition(ssBear1d,   title = "SSMT Bear 1D",         message = "Bearish SSMT 1D on {{ticker}}")
+
+// ── CISD ──
+alertcondition(cisdBullConf, title = "CISD Bull Confirmed", message = "Bullish CISD confirmed on {{ticker}} {{interval}}")
+alertcondition(cisdBearConf, title = "CISD Bear Confirmed", message = "Bearish CISD confirmed on {{ticker}} {{interval}}")
+
+// ── FVG ──
+alertcondition(bullFVG,   title = "Bullish FVG formed", message = "Bullish FVG on {{ticker}}")
+alertcondition(bearFVG,   title = "Bearish FVG formed", message = "Bearish FVG on {{ticker}}")
+alertcondition(fvgMitHit, title = "FVG Mitigated",      message = "FVG mitigated on {{ticker}}")
+
+// ── XC2 ──
+alertcondition(newXC2 and bull, title = "Bullish XC2", message = "Confirmed Bullish XC2 on {{ticker}}")
+alertcondition(newXC2 and bear, title = "Bearish XC2", message = "Confirmed Bearish XC2 on {{ticker}}")
+
+// ── Fractal C2 / C4 ──
+alertcondition(fr_buyTrig and fr_allowBuy,   title = "Fractal Bullish C2", message = "Bullish Fractal C2 on {{ticker}}")
+alertcondition(fr_sellTrig and fr_allowSell, title = "Fractal Bearish C2", message = "Bearish Fractal C2 on {{ticker}}")
+alertcondition(fr_c4Buy,  title = "Fractal Bullish C4 start", message = "Bullish C4 phase started on {{ticker}}")
+alertcondition(fr_c4Sell, title = "Fractal Bearish C4 start", message = "Bearish C4 phase started on {{ticker}}")
