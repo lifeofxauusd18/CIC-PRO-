@@ -13,8 +13,8 @@ indicator("PO3",
 //  1 Correlated Assets   2 Direction        3 HTF Candles      4 Features
 //  5 Candle Style        6 CISD             7 Fib Projections  8 SMT / SSMT
 //  9 Fair Value Gaps (9a 30m, 9b 1H, 9c 4H)
-// 10 HTF Imbalances     11 Fractal         12 Fractal Dashboard
-// 13 XC2                14 Session Opens   15 Reference Style  16 Separators
+// 10 HTF Imbalances
+// 11 XC2                12 Session Opens   13 Reference Style  14 Separators
 // ALERTS: see the ALERTS section at the very bottom of the script.
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -32,8 +32,6 @@ string g09a = "9a. FVG 30m ________________"
 string g09b = "9b. FVG 1H ________________"
 string g09c = "9c. FVG 4H ________________"
 string g10 = "10. HTF IMBALANCES ________________"
-string g11 = "11. FRACTAL C2 / C3 / C4 ________________"
-string g12 = "12. FRACTAL DASHBOARD ________________"
 string g13 = "13. XC2 ________________"
 string g14 = "14. SESSION OPENS ________________"
 string g15 = "15. REFERENCE STYLE ________________"
@@ -60,7 +58,6 @@ string in_sym4 = input.symbol('FOREXCOM:XAUEUR', '', inline = 'as4', group = g01
 
 // ═════════════ 2. DIRECTION ═════════════
 string cisd_bias = input.string('Auto', 'Bias Engine (CISD)', options = ['Auto', 'Bullish', 'Bearish'], group = g02)
-string fr_bias   = input.string('Neutral', 'Bias Engine (Fractal)', options = ['Neutral', 'Bullish', 'Bearish'], group = g02)
 
 // ═════════════ 3. HTF CANDLES ═════════════
 bool   htfOn1 = input.bool(true, 'HTF1', inline = 'hs1', group = g03)
@@ -84,7 +81,7 @@ bool  pspShow        = input.bool(true, 'Enable PSP?', inline = 'ft3', group = g
 color in_pspUp       = input.color(#00ADEF, '', inline = 'ft3', group = g04)
 color in_pspDown     = input.color(#DB5755, '', inline = 'ft3', group = g04)
 bool  smtHTFLines    = input.bool(true, 'HTF SMT', group = g04, tooltip = "SMT lines inside the HTF candle panel")
-bool  smtChartLines  = input.bool(true, 'Chart SMT', group = g04, tooltip = "Draws SMT lines on the main chart. Bullish text above the line, bearish text below the line. Supports all enabled SMT timeframes.")
+bool  smtChartLines  = input.bool(true, 'Chart SMT', group = g04, tooltip = "Draws SMT lines on the main chart. Bearish text above the line, bullish text below the line. Supports all enabled SMT timeframes.")
 
 // ═════════════ 5. CANDLE STYLE ═════════════
 color  in_bullBody   = input.color(color.new(#ffffff, 10), 'Body', inline = 'cs1', group = g05)
@@ -237,28 +234,7 @@ color in_htfFvgCol = input.color(color.new(color.gray, 80), '', inline = 'hi1', 
 bool  in_htfViOn   = input.bool(true, 'HTF Volume Imbalance', inline = 'hi2', group = g10)
 color in_htfViCol  = input.color(color.new(color.red, 50), '', inline = 'hi2', group = g10)
 
-// ═════════════ 11. FRACTAL ═════════════
-bool   fr_show    = input.bool(false, 'Show Fractal C2/C3/C4', group = g11)
-string fr_model   = input.string('Auto', 'Fractal', options = ['Custom', 'Auto', '1m-15m', '3m-30m', '5m-1H', '15m-4H', '1H-1D', '4H-1W', '1D-1W'], group = g11)
-string fr_cLTF    = input.timeframe('5', 'Custom LTF / HTF', inline = 'fr1', group = g11)
-string fr_cHTF    = input.timeframe('60', '', inline = 'fr1', group = g11)
-int    fr_hist    = input.int(1, 'History (0 = unlimited)', minval = 0, maxval = 40, group = g11)
-bool   fr_showLbl = input.bool(true, 'Labels', group = g11)
-bool   fr_showT   = input.bool(true, 'T-Spot Box', inline = 'fr2', group = g11)
-color  fr_bullBox = input.color(color.new(color.green, 80), '', inline = 'fr2', group = g11)
-color  fr_bearBox = input.color(color.new(color.gray, 80), '', inline = 'fr2', group = g11)
-bool   fr_showDashL = input.bool(true, 'C3/C4 Dash', inline = 'fr3', group = g11)
-color  fr_dashCol = input.color(color.black, '', inline = 'fr3', group = g11)
-bool   fr_alerts  = input.bool(true, 'Alerts on C2', group = g11)
-
-// ═════════════ 12. FRACTAL DASHBOARD ═════════════
-bool   fr_showTbl = input.bool(true, 'Show Dashboard', group = g12)
-string fr_tblV    = input.string('Top', 'Position', options = ['Top', 'Middle', 'Bottom'], inline = 'fd1', group = g12)
-string fr_tblH    = input.string('Right', '', options = ['Left', 'Center', 'Right'], inline = 'fd1', group = g12)
-color  fr_tblText = input.color(color.new(#131722, 0), 'Text', inline = 'fd2', group = g12)
-color  fr_tblBg   = input.color(color.new(#ffffff, 0), 'Background', inline = 'fd2', group = g12)
-
-// ═════════════ 13. XC2 ═════════════
+// ═════════════ 11. XC2 ═════════════
 bool   hideRC           = input.bool(false, 'Hide XC2', group = g13)
 bool   requireColors    = input.bool(false, 'Require Opposite C1/C2 Colors', group = g13)
 bool   requireCloseBack = input.bool(true, 'Require C2 Close Back Inside', group = g13)
@@ -270,7 +246,7 @@ bool   showLabels       = input.bool(true, 'Show XC2 Labels', inline = 'xc2', gr
 color  labelColor       = input.color(color.black, '', inline = 'xc2', group = g13)
 string labelSizeInput   = input.string("Small", '', options = ["Tiny", "Small", "Normal", "Large"], inline = 'xc2', group = g13)
 
-// ═════════════ 14. SESSION OPENS ═════════════
+// ═════════════ 12. SESSION OPENS ═════════════
 bool showWO  = input.bool(true, 'Show W.O (Sun 18:00)', group = g14)
 bool showDO  = input.bool(true, 'Show D.O (18:00)', group = g14)
 bool showMID = input.bool(true, 'Show Midnight (00:00)', group = g14)
@@ -279,14 +255,14 @@ bool showTEN = input.bool(true, 'Show NY Ref (10:00)', group = g14)
 bool showLvlLabels = input.bool(true, 'Show Labels', group = g14)
 bool showPrior     = input.bool(false, 'Show Previous Levels', group = g14)
 
-// ═════════════ 15. REFERENCE STYLE ═════════════
+// ═════════════ 13. REFERENCE STYLE ═════════════
 color  lineColor    = input.color(color.rgb(120, 123, 134), 'Line Color', group = g15)
 string lineStyle    = input.string("Dotted", 'Line Style', options = ["Solid", "Dashed", "Dotted"], inline = 'rs1', group = g15)
 int    lineWidth    = input.int(1, 'Width', minval = 1, maxval = 5, inline = 'rs1', group = g15)
 color  lvlTextColor = input.color(color.rgb(120, 123, 134), 'Text Color', inline = 'rs2', group = g15)
 string lvlTextSize  = input.string(size.small, 'Text Size', options = [size.tiny, size.small, size.normal], inline = 'rs2', group = g15)
 
-// ═════════════ 16. SEPARATORS ═════════════
+// ═════════════ 14. SEPARATORS ═════════════
 bool   in_sepShow    = input.bool(true, 'HTF Separators', inline = 'sp1', group = g16)
 color  in_htfSepCol  = input.color(color.gray, '', inline = 'sp1', group = g16)
 bool   enableChartSeparators = input.bool(false, 'Chart Separators', inline = 'sp2', group = g16)
@@ -991,14 +967,6 @@ settings.psp_sym3_use := in_use3
 settings.psp_sym3 := in_sym3
 settings.psp_sym4_use := in_use4
 settings.psp_sym4 := in_sym4
-string rawSym1 = settings.psp_sym1
-string rawSym2 = settings.psp_sym2
-string rawSym3 = settings.psp_sym3
-string rawSym4 = settings.psp_sym4
-bool rawUse1 = settings.psp_sym1_use
-bool rawUse2 = settings.psp_sym2_use
-bool rawUse3 = settings.psp_sym3_use
-bool rawUse4 = settings.psp_sym4_use
 
 color color_transparent = #ffffff00
 var array<line> separators = array.new_line(0)
@@ -1248,7 +1216,7 @@ f_exactPeak(int startIdx, int endIdx, bool wantHigh, int fbIdx, float fbPx) =>
 
 // HTF-panel sweeps + SMT, plus compact chart SMT labels for enabled HTF slots.
 // Chart SMT text is written at the middle of the line:
-//   BULLISH = above the line, BEARISH = below the line.
+//   BEARISH = above the line, BULLISH = below the line.
 method DrawSweepAndSMT(CandleSet candleSet) =>
     if (barstate.isrealtime or barstate.islast) and candleSet.candles.size() >= 2
         bool tfEnabled = getSMTEnabled(candleSet.settings.htf)
@@ -1326,10 +1294,10 @@ method DrawSweepAndSMT(CandleSet candleSet) =>
                     if settings.showChartSMT
                         [aHiIdx, aHiPx] = f_exactPeak(A.bar_idx, aEnd, true, A.high_bar_idx, A.h)
                         [bHiIdx, bHiPx] = f_exactPeak(B.bar_idx, bEnd, true, B.high_bar_idx, B.h)
-                        ln = line.new(aHiIdx, aHiPx, bHiIdx, bHiPx, xloc=xloc.bar_index, color=cleanSMTColor, width=div_line_width, style=LineStyle(div_line_style))
+                        ln = line.new(aHiIdx, aHiPx, bHiIdx, bHiPx, xloc=xloc.bar_index, color=smtBearCol, width=div_line_width, style=LineStyle(div_line_style))
                         array.push(chartSmtLines, ln)
-                        string bearTxt = "SMT " + HTFName(candleSet.settings.htf) + (settings.smt_label_show ? " · " + str.trim(divLabelsUp) : "")
-                        lbl = label.new(int(math.round((aHiIdx + bHiIdx) / 2)), (aHiPx + bHiPx) / 2, bearTxt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_down, color=color.new(color.black, 100), textcolor=color.rgb(0, 0, 0), size=size.tiny)
+                        string bearTxt = "SMT BEAR (" + HTFName(candleSet.settings.htf) + ")" + (settings.smt_label_show ? " · " + str.trim(divLabelsUp) : "")
+                        lbl = label.new(int(math.round((aHiIdx + bHiIdx) / 2)), (aHiPx + bHiPx) / 2, bearTxt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_down, color=color_transparent, textcolor=smt_text_col, size=size.small)
                         array.push(chartSmtLabels, lbl)
 
                 if bullishSMT
@@ -1339,10 +1307,10 @@ method DrawSweepAndSMT(CandleSet candleSet) =>
                     if settings.showChartSMT
                         [aLoIdx, aLoPx] = f_exactPeak(A.bar_idx, aEnd, false, A.low_bar_idx, A.l)
                         [bLoIdx, bLoPx] = f_exactPeak(B.bar_idx, bEnd, false, B.low_bar_idx, B.l)
-                        ln = line.new(aLoIdx, aLoPx, bLoIdx, bLoPx, xloc=xloc.bar_index, color=cleanSMTColor, width=div_line_width, style=LineStyle(div_line_style))
+                        ln = line.new(aLoIdx, aLoPx, bLoIdx, bLoPx, xloc=xloc.bar_index, color=smtBullCol, width=div_line_width, style=LineStyle(div_line_style))
                         array.push(chartSmtLines, ln)
-                        string bullTxt = "SMT " + HTFName(candleSet.settings.htf) + (settings.smt_label_show ? " · " + str.trim(divLabelsDown) : "")
-                        lbl = label.new(int(math.round((aLoIdx + bLoIdx) / 2)), (aLoPx + bLoPx) / 2, bullTxt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_up, color=color.new(color.black, 100), textcolor=color.rgb(0, 0, 0), size=size.tiny)
+                        string bullTxt = "SMT BULL (" + HTFName(candleSet.settings.htf) + ")" + (settings.smt_label_show ? " · " + str.trim(divLabelsDown) : "")
+                        lbl = label.new(int(math.round((aLoIdx + bLoIdx) / 2)), (aLoPx + bLoPx) / 2, bullTxt, xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_up, color=color_transparent, textcolor=smt_text_col, size=size.small)
                         array.push(chartSmtLabels, lbl)
 
             if settings.sweep_show and not hasSMT
@@ -2101,317 +2069,8 @@ if showTEN and array.size(tenLines) > 0 and not na(priceTEN)
 trimLevels(tenLines, tenLabels, keepDaily)
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ▼▼▼ FRACTAL C2 / C3 / C4 + T-SPOT MODULE ▼▼▼
-// ═══════════════════════════════════════════════════════════════════════════
-
-type FrSetup
-    bool  isBull
-    float extreme
-    int   phase = 1
-    bool  dead = false
-    label c2Lbl
-    box   c3Box
-    line  c3Dash
-    box   c4Box
-    line  c4Dash
-    label c4Lbl
-    float c4Top
-    float c4Bottom
-    bool  c4Invalid = false
-    int   c2Bar
-    float c2Price
-
-type FrRecord
-    FrSetup setup
-    int     creationBar
-
-var array<FrRecord> fr_records = array.new<FrRecord>()
-var FrSetup fr_buy  = na
-var FrSetup fr_sell = na
-
-bool fr_allowBuy  = fr_bias != 'Bearish'
-bool fr_allowSell = fr_bias != 'Bullish'
-
-fr_tfMins(string t) =>
-    switch t
-        '1D' => 1440
-        'D'  => 1440
-        '1W' => 10080
-        'W'  => 10080
-        '1M' => 43200
-        'M'  => 43200
-        =>      int(str.tonumber(t))
-
-fr_curTf() =>
-    timeframe.isdaily ? '1D' : timeframe.isweekly ? '1W' : timeframe.ismonthly ? '1M' : timeframe.period
-
-fr_autoHTF() =>
-    switch timeframe.period
-        '1'   => '15'
-        '3'   => '30'
-        '5'   => '60'
-        '15'  => '240'
-        '60'  => '1D'
-        '240' => '1W'
-        '1D'  => '1M'
-        =>       '1M'
-
-fr_ltf() =>
-    switch fr_model
-        '1m-15m' => '1'
-        '3m-30m' => '3'
-        '5m-1H'  => '5'
-        '15m-4H' => '15'
-        '1H-1D'  => '60'
-        '4H-1W'  => '240'
-        '1D-1W'  => '1D'
-        'Custom' => fr_cLTF
-        =>          fr_curTf()
-
-fr_isAutoValid(int mins) => mins == 1 or mins == 3 or mins == 5 or mins == 15 or mins == 60 or mins == 240 or mins == 1440
-
-fr_name(string t) =>
-    int s = timeframe.in_seconds(t)
-    s < 3600 ? str.tostring(int(s / 60)) + 'm' : s < 86400 ? str.tostring(int(s / 3600)) + 'H' : s == 86400 ? '1D' : s <= 604800 ? '1W' : '1M'
-
-string fr_htfTf = switch fr_model
-    '1m-15m' => '15'
-    '3m-30m' => '30'
-    '5m-1H'  => '60'
-    '15m-4H' => '240'
-    '1H-1D'  => '1D'
-    '4H-1W'  => '1W'
-    '1D-1W'  => '1W'
-    'Custom' => fr_cHTF
-    =>          fr_autoHTF()
-
-bool   fr_valid   = fr_model == 'Auto' ? fr_isAutoValid(fr_tfMins(fr_curTf())) : fr_tfMins(fr_curTf()) <= fr_tfMins(fr_ltf())
-string fr_htfName = fr_name(fr_htfTf)
-string fr_ltfName = fr_name(fr_ltf())
-
-[fr_curH, fr_curL, fr_curC, fr_prevH1, fr_prevL1] = request.security(syminfo.tickerid, fr_htfTf, [high[0], low[0], close[0], high[1], low[1]], lookahead = barmerge.lookahead_on)
-
-bool fr_c2Buy  = fr_curL < fr_prevL1 and fr_curC > fr_prevL1
-bool fr_c2Sell = fr_curH > fr_prevH1 and fr_curC < fr_prevH1
-bool fr_periodChanged = time(fr_htfTf) != time(fr_htfTf)[1]
-
-var float fr_cH = na
-var float fr_cL = na
-var int   fr_cHBar = na
-var int   fr_cLBar = na
-var float fr_pH = na
-var float fr_pL = na
-var int   fr_pHBar = na
-var int   fr_pLBar = na
-var bool  fr_prevBuy = false
-var bool  fr_prevSell = false
-
-if fr_periodChanged
-    fr_pH := fr_cH
-    fr_pL := fr_cL
-    fr_pHBar := fr_cHBar
-    fr_pLBar := fr_cLBar
-    fr_cH := high
-    fr_cL := low
-    fr_cHBar := bar_index
-    fr_cLBar := bar_index
-    fr_prevBuy  := fr_c2Buy[1]
-    fr_prevSell := fr_c2Sell[1]
-else
-    if high > fr_cH
-        fr_cH := high
-        fr_cHBar := bar_index
-    if low < fr_cL
-        fr_cL := low
-        fr_cLBar := bar_index
-
-fr_dirLabel(int x, float y, string txt, bool bullish) =>
-    label.new(x, y, text = txt, xloc = xloc.bar_index, yloc = yloc.price, style = bullish ? label.style_label_up : label.style_label_down, color = na, textcolor = color.gray, size = size.small, text_font_family = font.family_monospace)
-
-fr_topBot() =>
-    float mid = (fr_pH + fr_pL) / 2
-    [math.max(open, mid), math.min(open, mid)]
-
-fr_drawPhase(bool isBull, bool isC4, int startBar, float top, float bot) =>
-    float yDash = isBull ? bot : top
-    box   bx   = fr_showT ? box.new(startBar, top, bar_index, bot, border_color = na, bgcolor = isBull ? fr_bullBox : fr_bearBox) : na
-    line  dash = fr_showDashL ? line.new(startBar, yDash, bar_index, yDash, color = fr_dashCol, width = 1, style = line.style_dotted) : na
-    label lbl  = na
-    if isC4 and fr_showT and fr_showLbl and fr_valid
-        lbl := fr_dirLabel(bar_index + 2, isBull ? bot : top, 'C4', isBull)
-    [bx, dash, lbl]
-
-fr_deleteVisuals(FrSetup s) =>
-    if not na(s)
-        if not na(s.c2Lbl)
-            label.delete(s.c2Lbl)
-        if not na(s.c3Box)
-            box.delete(s.c3Box)
-        if not na(s.c3Dash)
-            line.delete(s.c3Dash)
-        if not na(s.c4Box)
-            box.delete(s.c4Box)
-        if not na(s.c4Dash)
-            line.delete(s.c4Dash)
-        if not na(s.c4Lbl)
-            label.delete(s.c4Lbl)
-
-fr_register(FrSetup s) =>
-    fr_records.push(FrRecord.new(s, bar_index))
-    while fr_hist > 0 and fr_records.size() > fr_hist
-        evicted = fr_records.shift()
-        fr_deleteVisuals(evicted.setup)
-
-fr_newSetup(bool isBull, float extremePrice, int extremeBar) =>
-    FrSetup s = FrSetup.new(isBull, extremePrice, 1, false)
-    s.c2Bar := extremeBar
-    s.c2Price := extremePrice
-    if fr_valid and fr_showLbl and not na(extremeBar)
-        s.c2Lbl := fr_dirLabel(extremeBar, extremePrice, 'C2 (' + fr_htfName + ')', isBull)
-    [top, bot] = fr_topBot()
-    [bx, dash, _l] = fr_drawPhase(isBull, false, bar_index, top, bot)
-    s.c3Box := bx
-    s.c3Dash := dash
-    fr_register(s)
-    s
-
-method advanceToC4(FrSetup s) =>
-    if not na(s.c3Box)
-        box.set_right(s.c3Box, bar_index)
-    if not na(s.c3Dash)
-        line.set_x2(s.c3Dash, bar_index)
-    [top, bot] = fr_topBot()
-    s.c4Top := top
-    s.c4Bottom := bot
-    [bx, dash, lbl] = fr_drawPhase(s.isBull, true, bar_index, top, bot)
-    s.c4Box := bx
-    s.c4Dash := dash
-    s.c4Lbl := lbl
-    s.phase := 2
-    s.c4Invalid := false
-    s
-
-method finish(FrSetup s) =>
-    if not na(s.c4Box)
-        box.set_right(s.c4Box, bar_index)
-    if not na(s.c4Dash)
-        line.set_x2(s.c4Dash, bar_index)
-    s.phase := 0
-    s
-
-method extendAndCheck(FrSetup s) =>
-    if not na(s) and not s.dead and s.phase != 0
-        box  extBox  = s.phase == 1 ? s.c3Box : s.c4Box
-        line extDash = s.phase == 1 ? s.c3Dash : s.c4Dash
-        if not na(extBox)
-            box.set_right(extBox, bar_index)
-        if not na(extDash)
-            line.set_x2(extDash, bar_index)
-        bool breach = s.isBull ? low < s.extreme : high > s.extreme
-        if breach
-            if not na(s.c3Box)
-                box.delete(s.c3Box)
-                s.c3Box := na
-            if not na(s.c3Dash)
-                line.delete(s.c3Dash)
-                s.c3Dash := na
-            if not na(s.c4Box)
-                box.delete(s.c4Box)
-                s.c4Box := na
-            if not na(s.c4Dash)
-                line.delete(s.c4Dash)
-                s.c4Dash := na
-            if not na(s.c4Lbl)
-                label.delete(s.c4Lbl)
-                s.c4Lbl := na
-            s.dead := true
-            s.phase := 0
-    s
-
-method checkC4Invalid(FrSetup s) =>
-    if not na(s) and not s.dead and s.phase == 2 and not s.c4Invalid
-        bool invalid = s.isBull ? close[1] < s.c4Bottom : close[1] > s.c4Top
-        if invalid
-            s.c4Invalid := true
-            if not na(s.c4Box)
-                box.delete(s.c4Box)
-                s.c4Box := na
-            if not na(s.c4Dash)
-                line.delete(s.c4Dash)
-                s.c4Dash := na
-            if not na(s.c4Lbl)
-                label.delete(s.c4Lbl)
-                s.c4Lbl := na
-    s
-
-fr_processC2(bool trigger, bool allow, bool isBull, float extremePrice, int extremeBar, FrSetup existing) =>
-    FrSetup result = existing
-    if trigger and allow
-        result := fr_newSetup(isBull, extremePrice, extremeBar)
-    else if fr_periodChanged and not na(existing) and not existing.dead
-        result := existing.phase == 1 ? existing.advanceToC4() : existing.phase == 2 ? existing.finish() : existing
-    result
-
-bool fr_buyTrig  = fr_show and fr_periodChanged and fr_prevBuy
-bool fr_sellTrig = fr_show and fr_periodChanged and fr_prevSell
-
-// ALERT FLAGS — C4 phase begins on the next HTF period after a live C3 box
-bool fr_c4Buy  = false
-bool fr_c4Sell = false
-if fr_show and fr_periodChanged
-    if not na(fr_buy) and not fr_buy.dead and fr_buy.phase == 1 and not (fr_buyTrig and fr_allowBuy)
-        fr_c4Buy := true
-    if not na(fr_sell) and not fr_sell.dead and fr_sell.phase == 1 and not (fr_sellTrig and fr_allowSell)
-        fr_c4Sell := true
-
-fr_buy  := fr_processC2(fr_buyTrig,  fr_allowBuy,  true,  fr_pL, fr_pLBar, fr_buy)
-fr_sell := fr_processC2(fr_sellTrig, fr_allowSell, false, fr_pH, fr_pHBar, fr_sell)
-
-if fr_show
-    fr_buy  := fr_buy.extendAndCheck()
-    fr_sell := fr_sell.extendAndCheck()
-    fr_buy  := fr_buy.checkC4Invalid()
-    fr_sell := fr_sell.checkC4Invalid()
-
-if fr_alerts
-    if fr_buyTrig and fr_allowBuy
-        alert('Bullish C2 (' + fr_htfName + ') formed on ' + syminfo.ticker, alert.freq_once_per_bar)
-    if fr_sellTrig and fr_allowSell
-        alert('Bearish C2 (' + fr_htfName + ') formed on ' + syminfo.ticker, alert.freq_once_per_bar)
-
-// Dashboard
-fr_addTk(string base, bool use, string sym) =>
-    use ? (base == '' ? syminfo.ticker(sym) : base + ' - ' + syminfo.ticker(sym)) : base
-
-string fr_tk = fr_addTk('', rawUse1, rawSym1)
-fr_tk := fr_addTk(fr_tk, rawUse2, rawSym2)
-fr_tk := fr_addTk(fr_tk, rawUse3, rawSym3)
-fr_tk := fr_addTk(fr_tk, rawUse4, rawSym4)
-fr_tblPos(string v, string h) =>
-    switch v
-        'Top' =>
-            switch h
-                'Left'   => position.top_left
-                'Center' => position.top_center
-                => position.top_right
-        'Middle' =>
-            switch h
-                'Left'   => position.middle_left
-                'Center' => position.middle_center
-                => position.middle_right
-        =>
-            switch h
-                'Left'   => position.bottom_left
-                'Center' => position.bottom_center
-                => position.bottom_right
-var table fr_tbl = table.new(fr_tblPos(fr_tblV, fr_tblH), 1, 1, bgcolor = fr_tblBg, border_width = 0)
-if barstate.islast and fr_showTbl
-    string frTxt = fr_valid ? '| ' + fr_htfName + ' → ' + fr_ltfName + ' |  ' + fr_tk : '⚠ Switch chart to ' + fr_ltfName + ' (fractal ' + fr_ltfName + ' → ' + fr_htfName + ')'
-    table.cell(fr_tbl, 0, 0, frTxt, text_color = fr_tblText, bgcolor = fr_tblBg, text_size = size.small, text_halign = text.align_left)
-
-// ═══════════════════════════════════════════════════════════════════════════
 // ▼▼▼ SWING SMT ENGINE (chart timeframe, up to 4 correlated assets) ▼▼▼
-// Bullish text = above the line, Bearish text = below the line
+// Bearish text = above the line, Bullish text = below the line
 // ═══════════════════════════════════════════════════════════════════════════
 
 float smtTol = smtTolTicks * syminfo.mintick
@@ -2443,7 +2102,7 @@ if smtEnable and smtSwingOn and getSMTEnabled(timeframe.period) and barstate.isc
     bool swingHi = high[1] > high[0] and high[1] > high[2]
     bool swingLo = low[1]  < low[0]  and low[1]  < low[2]
 
-    // ── Swing HIGH → bearish SMT (text below the line) ──
+    // ── Swing HIGH → bearish SMT (text above the line) ──
     if swingHi
         float aHi    = high[1]
         int   aHiBar = bar_index - 1
@@ -2462,7 +2121,7 @@ if smtEnable and smtSwingOn and getSMTEnabled(timeframe.period) and barstate.isc
             if divCnt >= smtMinAssets
                 bearSMT := true
                 line ln = line.new(smtPrevHiBarA, smtPrevHiA, aHiBar, aHi, color = smtBearCol, style = LineStyle(div_line_style), width = math.max(div_line_width, 1))
-                label lb = label.new(int(math.round((smtPrevHiBarA + aHiBar) / 2)), (smtPrevHiA + aHi) / 2, "SMT " + HTFName(timeframe.period) + (smt_label_show ? " · " + divNames : ""), yloc = yloc.price, style = label.style_label_up, color = color_transparent, textcolor = smt_text_col, size = size.tiny)
+                label lb = label.new(int(math.round((smtPrevHiBarA + aHiBar) / 2)), (smtPrevHiA + aHi) / 2, "SMT BEAR (" + HTFName(timeframe.period) + ")" + (smt_label_show ? " · " + divNames : ""), yloc = yloc.price, style = label.style_label_down, color = color_transparent, textcolor = smt_text_col, size = size.small)
                 array.push(smtLines, ln)
                 array.push(smtLabels, lb)
         smtPrevHiA := aHi
@@ -2471,7 +2130,7 @@ if smtEnable and smtSwingOn and getSMTEnabled(timeframe.period) and barstate.isc
             if not na(smtBHi.get(k))
                 smtPrevHiB.set(k, smtBHi.get(k))
 
-    // ── Swing LOW → bullish SMT (text above the line) ──
+    // ── Swing LOW → bullish SMT (text below the line) ──
     if swingLo
         float aLo    = low[1]
         int   aLoBar = bar_index - 1
@@ -2490,7 +2149,7 @@ if smtEnable and smtSwingOn and getSMTEnabled(timeframe.period) and barstate.isc
             if divCntL >= smtMinAssets
                 bullSMT := true
                 line lnL = line.new(smtPrevLoBarA, smtPrevLoA, aLoBar, aLo, color = smtBullCol, style = LineStyle(div_line_style), width = math.max(div_line_width, 1))
-                label lbL = label.new(int(math.round((smtPrevLoBarA + aLoBar) / 2)), (smtPrevLoA + aLo) / 2, "SMT " + HTFName(timeframe.period) + (smt_label_show ? " · " + divNamesL : ""), yloc = yloc.price, style = label.style_label_down, color = color_transparent, textcolor = smt_text_col, size = size.tiny)
+                label lbL = label.new(int(math.round((smtPrevLoBarA + aLoBar) / 2)), (smtPrevLoA + aLo) / 2, "SMT BULL (" + HTFName(timeframe.period) + ")" + (smt_label_show ? " · " + divNamesL : ""), yloc = yloc.price, style = label.style_label_up, color = color_transparent, textcolor = smt_text_col, size = size.small)
                 array.push(smtLines, lnL)
                 array.push(smtLabels, lbL)
         smtPrevLoA := aLo
@@ -2509,7 +2168,7 @@ if smtEnable and smtSwingOn and getSMTEnabled(timeframe.period) and barstate.isc
 // tolerance; enough correlated assets fail to confirm (inverse-aware).
 // Evaluated ONLY on the first bar of the new HTF candle -> no repaint.
 // Reuses the swing-SMT security calls above (0 extra request.security).
-// Bearish text below the line, bullish text above (same as swing SMT).
+// Bearish text above the line, bullish text below (same as swing SMT).
 // ═══════════════════════════════════════════════════════════════════════════
 
 var array<line>  ssmtLines  = array.new_line()
@@ -2604,7 +2263,7 @@ ssmtScan(string tf, string tfTxt, bool enabled) =>
                 if ssCnt >= ssmtMinAssets
                     bearOut := true
                     line ssLn = line.new(aPHb, aPH, aCHb, aCH, color = ssmtBearCol, style = ssmt_line_style == "Solid" ? line.style_solid : ssmt_line_style == "Dashed" ? line.style_dashed : line.style_dotted, width = ssmt_line_width)
-                    label ssLb = label.new(int(math.round((aPHb + aCHb) / 2)), (aPH + aCH) / 2, "SSMT " + tfTxt + (ssmt_label_show ? " · " + ssNm : ""), yloc = yloc.price, style = label.style_label_up, color = color_transparent, textcolor = ssmt_text_col, size = size.small)
+                    label ssLb = label.new(int(math.round((aPHb + aCHb) / 2)), (aPH + aCH) / 2, "SSMT BEAR (" + tfTxt + ")" + (ssmt_label_show ? " · " + ssNm : ""), yloc = yloc.price, style = label.style_label_down, color = color_transparent, textcolor = ssmt_text_col, size = size.small)
                     array.push(ssmtLines, ssLn)
                     array.push(ssmtLabels, ssLb)
             // ── bullish: chart asset took the previous low ──
@@ -2623,7 +2282,7 @@ ssmtScan(string tf, string tfTxt, bool enabled) =>
                 if ssCntL >= ssmtMinAssets
                     bullOut := true
                     line ssLnL = line.new(aPLb, aPL, aCLb, aCL, color = ssmtBullCol, style = ssmt_line_style == "Solid" ? line.style_solid : ssmt_line_style == "Dashed" ? line.style_dashed : line.style_dotted, width = ssmt_line_width)
-                    label ssLbL = label.new(int(math.round((aPLb + aCLb) / 2)), (aPL + aCL) / 2, "SSMT " + tfTxt + (ssmt_label_show ? " · " + ssNmL : ""), yloc = yloc.price, style = label.style_label_down, color = color_transparent, textcolor = ssmt_text_col, size = size.small)
+                    label ssLbL = label.new(int(math.round((aPLb + aCLb) / 2)), (aPL + aCL) / 2, "SSMT BULL (" + tfTxt + ")" + (ssmt_label_show ? " · " + ssNmL : ""), yloc = yloc.price, style = label.style_label_up, color = color_transparent, textcolor = ssmt_text_col, size = size.small)
                     array.push(ssmtLines, ssLnL)
                     array.push(ssmtLabels, ssLbL)
             while array.size(ssmtLines) > ssmtMax
@@ -2893,22 +2552,20 @@ if barstate.islast
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ▼▼▼ ALERTS ▼▼▼
-// Order: Any-signal → SMT / SSMT → CISD → FVG → XC2 → Fractal.
+// Order: Any-signal → SMT / SSMT → CISD → FVG → XC2.
 // In TradingView: Create Alert → Condition = this indicator → pick one below.
 // Notes:
 //  • SMT swing alerts need "Swing SMT" ON. SSMT needs SSMT ON + a TF enabled.
-//  • CISD alerts need "Show CISD" ON.  Fractal alerts need "Show Fractal" ON.
+//  • CISD alerts need "Show CISD" ON.
 //  • Use "Once Per Bar Close" for every alert below (all are bar-close signals).
-//  • The Fractal C2 alert() call (settings §11 "Alerts on C2") is separate: create it
-//    with Condition = this indicator → "Any alert() function call".
 // ═══════════════════════════════════════════════════════════════════════════
 
 bool anyBullSMT = bullSMT or bullSSMT
 bool anyBearSMT = bearSMT or bearSSMT
 
 // ── Any-signal ──
-alertcondition(anyBullSMT or cisdBullConf or bullFVG or (newXC2 and bull) or (fr_buyTrig and fr_allowBuy),  title = "⭐ Any Bullish Signal", message = "Bullish signal (SMT/SSMT/CISD/FVG/XC2/C2) on {{ticker}} {{interval}}")
-alertcondition(anyBearSMT or cisdBearConf or bearFVG or (newXC2 and bear) or (fr_sellTrig and fr_allowSell), title = "⭐ Any Bearish Signal", message = "Bearish signal (SMT/SSMT/CISD/FVG/XC2/C2) on {{ticker}} {{interval}}")
+alertcondition(anyBullSMT or cisdBullConf or bullFVG or (newXC2 and bull), title = "⭐ Any Bullish Signal", message = "Bullish signal (SMT/SSMT/CISD/FVG/XC2) on {{ticker}} {{interval}}")
+alertcondition(anyBearSMT or cisdBearConf or bearFVG or (newXC2 and bear), title = "⭐ Any Bearish Signal", message = "Bearish signal (SMT/SSMT/CISD/FVG/XC2) on {{ticker}} {{interval}}")
 
 // ── SMT / SSMT ──
 alertcondition(anyBullSMT, title = "📊 Any SMT/SSMT Bull", message = "Bullish SMT/SSMT on {{ticker}} {{interval}}")
@@ -2946,9 +2603,3 @@ alertcondition(fvgMitHit, title = "FVG Mitigated",      message = "FVG mitigated
 // ── XC2 ──
 alertcondition(newXC2 and bull, title = "Bullish XC2", message = "Confirmed Bullish XC2 on {{ticker}}")
 alertcondition(newXC2 and bear, title = "Bearish XC2", message = "Confirmed Bearish XC2 on {{ticker}}")
-
-// ── Fractal C2 / C4 ──
-alertcondition(fr_buyTrig and fr_allowBuy,   title = "Fractal Bullish C2", message = "Bullish Fractal C2 on {{ticker}}")
-alertcondition(fr_sellTrig and fr_allowSell, title = "Fractal Bearish C2", message = "Bearish Fractal C2 on {{ticker}}")
-alertcondition(fr_c4Buy,  title = "Fractal Bullish C4 start", message = "Bullish C4 phase started on {{ticker}}")
-alertcondition(fr_c4Sell, title = "Fractal Bearish C4 start", message = "Bearish C4 phase started on {{ticker}}")
