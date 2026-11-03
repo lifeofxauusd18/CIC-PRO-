@@ -1,0 +1,2929 @@
+//@version=6
+indicator("PO3", 
+     shorttitle = "PO3", 
+     overlay = true, 
+     max_boxes_count = 500, 
+     max_lines_count = 500, 
+     max_labels_count = 500, 
+     max_bars_back = 5000, 
+     calc_bars_count = 3000)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SETTINGS PANEL
+//  1 Correlated Assets   2 Direction        3 HTF Candles      4 Cracks (features)
+//  5 Candle Style        6 CISD             7 Fib Projections  8 SMT / SSMT (labels + lines)
+//  9 Fair Value Gaps (9a 30m, 9b 1H, 9c 4H)
+// 10 HTF Imbalances
+// 13 XC2                14 Session Opens   15 Reference Style  16 Separators
+// 17 PSP + SMT Confluence                  18 Info Table (dashboard)
+// ALERTS: see the ALERTS section at the very bottom of the script.
+// ═══════════════════════════════════════════════════════════════════════════
+
+string g01 = "1. CORRELATED ASSETS ________________"
+string g02 = "2. DIRECTION ________________"
+string g03 = "3. HTF CANDLES ________________"
+string g04 = "4. CRACKS ________________"
+string g05 = "5. CANDLE STYLE ________________"
+string g06 = "6. CISD ________________"
+string g07 = "7. FIBONACCI PROJECTIONS ________________"
+string g08 = "8. SMT ________________"
+string g08b = "8b. SSMT ________________"
+string g09 = "9. FAIR VALUE GAPS (shared) ________________"
+string g09a = "9a. FVG 30m ________________"
+string g09b = "9b. FVG 1H ________________"
+string g09c = "9c. FVG 4H ________________"
+string g10 = "10. HTF IMBALANCES ________________"
+string g13 = "13. XC2 ________________"
+string g14 = "14. SESSION OPENS ________________"
+string g15 = "15. REFERENCE STYLE ________________"
+string g16 = "16. SEPARATORS ________________"
+string g17 = "17. PSP + SMT CONFLUENCE ________________"
+string g18 = "18. INFO TABLE / DASHBOARD ________________"
+
+color primBullCol = #00a2c7
+color primBearCol = #db5755
+color C_TRANSPARENT = color.new(color.white, 100)
+// Curated palette (GxT §18.1) — no raw color.red / color.gray
+color C_GRAY = #787b86
+color C_RED  = #ef5350
+color C_TEAL = #26a69a
+color C_DARK = #1a1a2e
+
+string FVG_MIT_CLOSE = "Close Inside / Beyond"
+string FVG_MIT_WICK  = "Any Wick Touch"
+string FVG_MIT_FULL  = "Full Fill"
+
+// ═════════════ 1. CORRELATED ASSETS ═════════════
+bool   autoPairs = input.bool(false, 'Auto Detect Correlated Assets', group = g01, tooltip = "ON: Assets 1-4 are chosen from the chart symbol (NQ -> ES/YM/RTY, Gold -> Silver/XAUEUR/XAUGBP, etc). The symbol boxes are only used if the chart asset isn't recognised or this is OFF. The Use-checkboxes still work as per-slot switches.")
+bool   in_use1 = input.bool(true, 'Use Asset 1', inline = 'as1', group = g01)
+string in_sym1 = input.symbol('FOREXCOM:XAUUSD', '', inline = 'as1', group = g01)
+bool   in_use2 = input.bool(true, 'Use Asset 2', inline = 'as2', group = g01)
+string in_sym2 = input.symbol('FOREXCOM:XAGUSD', '', inline = 'as2', group = g01)
+bool   in_use3 = input.bool(true, 'Use Asset 3', inline = 'as3', group = g01)
+string in_sym3 = input.symbol('FOREXCOM:XAUGBP', '', inline = 'as3', group = g01)
+bool   in_use4 = input.bool(true, 'Use Asset 4', inline = 'as4', group = g01)
+string in_sym4 = input.symbol('FOREXCOM:XAUEUR', '', inline = 'as4', group = g01)
+
+// ═════════════ 2. DIRECTION ═════════════
+string cisd_bias = input.string('Auto', 'Bias Engine (CISD)', options = ['Auto', 'Bullish', 'Bearish'], group = g02)
+
+// ═════════════ 3. HTF CANDLES ═════════════
+bool   htfOn1 = input.bool(true, 'HTF1', inline = 'hs1', group = g03)
+string htfTf1 = input.string('1H', '', options = ['15m','30m','1H','90m','4H','6H','7H','1D','1W'], inline = 'hs1', group = g03)
+int    htfCnt1 = input.int(5, '', minval = 1, maxval = 10, inline = 'hs1', group = g03)
+bool   htfOn2 = input.bool(true, 'HTF2', inline = 'hs2', group = g03)
+string htfTf2 = input.string('90m', '', options = ['15m','30m','1H','90m','4H','6H','7H','1D','1W'], inline = 'hs2', group = g03)
+int    htfCnt2 = input.int(5, '', minval = 1, maxval = 10, inline = 'hs2', group = g03)
+bool   htfOn3 = input.bool(true, 'HTF3', inline = 'hs3', group = g03)
+string htfTf3 = input.string('4H', '', options = ['15m','30m','1H','90m','4H','6H','7H','1D','1W'], inline = 'hs3', group = g03)
+int    htfCnt3 = input.int(5, '', minval = 1, maxval = 10, inline = 'hs3', group = g03)
+int in_offset    = input.int(50, 'Padding from chart', minval = 1, group = g03)
+int in_width     = input.int(2, 'Candle width', minval = 1, maxval = 4, group = g03)
+int in_buffer    = input.int(1, 'Space between candles', minval = 1, maxval = 4, group = g03)
+int in_htfBuffer = input.int(5, 'Space between HTFs', minval = 1, maxval = 10, group = g03)
+
+// ═════════════ 4. CRACKS (FEATURES) ═════════════
+bool  smtEnable      = input.bool(true, 'Enable SMT?', inline = 'ft2', group = g04)
+color cleanSMTColor  = input.color(#787b86, '', inline = 'ft2', group = g04)
+bool  pspShow        = input.bool(true, 'Enable PSP?', inline = 'ft3', group = g04)
+color in_pspUp       = input.color(#00ADEF, '', inline = 'ft3', group = g04)
+color in_pspDown     = input.color(#DB5755, '', inline = 'ft3', group = g04)
+bool  smtHTFLines    = input.bool(true, 'HTF SMT', group = g04, tooltip = "SMT lines inside the HTF candle panel. Drawn for every visible panel (section 3), regardless of the timeframe switches in section 8.")
+bool  smtChartLines  = input.bool(true, 'Chart SMT', group = g04, tooltip = "Draws SMT lines on the main chart. Bearish text above the line, bullish text below the line. Only for the timeframes ticked in section 8.")
+
+// ═════════════ 5. CANDLE STYLE ═════════════
+color  in_bullBody   = input.color(color.new(#ffffff, 10), 'Body', inline = 'cs1', group = g05)
+color  in_bearBody   = input.color(color.new(#000000, 53), '', inline = 'cs1', group = g05)
+color  in_bullBorder = input.color(#000000, 'Border', inline = 'cs2', group = g05)
+color  in_bearBorder = input.color(#000000, '', inline = 'cs2', group = g05)
+color  in_bullWick   = input.color(#000000, 'Wick', inline = 'cs3', group = g05)
+color  in_bearWick   = input.color(#000000, '', inline = 'cs3', group = g05)
+bool   in_sweepOn    = input.bool(true, 'Sweeps', inline = 'cs4', group = g05)
+color  in_sweepCol   = input.color(#9c9c9c, '', inline = 'cs4', group = g05)
+bool   in_htfLblOn   = input.bool(true, 'HTF Label', inline = 'cs5', group = g05)
+color  in_lblColor   = input.color(color.black, '', inline = 'cs5', group = g05)
+string in_lblSize    = input.string(size.small, '', [size.tiny, size.small, size.normal, size.large, size.huge], inline = 'cs5', group = g05)
+bool   in_tmrOn      = input.bool(true, 'Remaining Time', inline = 'cs6', group = g05)
+color  in_tmrColor   = input.color(color.black, '', inline = 'cs6', group = g05)
+string in_tmrSize    = input.string(size.tiny, '', [size.tiny, size.small, size.normal, size.large, size.huge], inline = 'cs6', group = g05)
+string in_lblPos     = input.string('Top', 'Label Position', options = ['Top', 'Bottom', 'Both'], group = g05)
+string in_lblAlign   = input.string('Follow Candles', 'Label Alignment', options = ['Follow Candles', 'Align'], group = g05)
+
+// ═════════════ 6. CISD ═════════════
+bool   inp_cisd_show   = input.bool(false, 'Show CISD', inline = 'ci1', group = g06)
+color  cisd_color_bull = input.color(primBullCol, '', inline = 'ci1', group = g06)
+color  cisd_color_bear = input.color(primBearCol, '', inline = 'ci1', group = g06)
+int    cisd_offset     = input.int(2, 'Extend Bars', minval = 0, maxval = 20, inline = 'ci1', group = g06)
+bool   cisd_purge_filter    = input.bool(false, 'Filter by Purge', inline = 'ci2', group = g06)
+int    cisd_purge_tolerance = input.int(5, '', minval = 1, maxval = 50, inline = 'ci2', group = g06)
+bool   cisd_size_filter = input.bool(true, 'Size Filter', inline = 'ci3', group = g06)
+string cisd_size_preset = input.string('Regular', '', options = ['Really small', 'Small', 'Regular', 'Sizeable', 'Juicy'], inline = 'ci3', group = g06)
+
+// ═════════════ 7. FIBONACCI PROJECTIONS ═════════════
+bool   cisd_fib_show_raw = input.bool(false, 'Show Fibonacci Projections', group = g07)
+int    cisd_fib_min_minutes = input.int(120, 'Minimum Minutes Between Projections', minval = 0, group = g07, tooltip = "Only applies on charts below 1H.")
+bool   cisd_fib_prop     = input.bool(false, 'Include Propulsion Setups', group = g07)
+string cisd_fib_mode     = input.string('Body', 'Calculate From', options = ['Body', 'Wick'], group = g07)
+int    cisd_fib_max      = input.int(5, 'Max Fibs Per Direction', minval = 1, maxval = 10, group = g07)
+
+color cisd_fib_n05_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fb1', group = g07)
+bool  cisd_fib_n05       = input.bool(false, '-0.5', inline = 'fb1', group = g07)
+color cisd_fib_n10_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fb1', group = g07)
+bool  cisd_fib_n10       = input.bool(false, '-1', inline = 'fb1', group = g07)
+color cisd_fib_n15_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fb1', group = g07)
+bool  cisd_fib_n15       = input.bool(false, '-1.5', inline = 'fb1', group = g07)
+color cisd_fib_n20_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fb2', group = g07)
+bool  cisd_fib_n20       = input.bool(true, '-2', inline = 'fb2', group = g07)
+color cisd_fib_n25_color = input.color(color.new(primBearCol, 0), '', inline = 'fb2', group = g07)
+bool  cisd_fib_n25       = input.bool(true, '-2.5', inline = 'fb2', group = g07)
+color cisd_fib_n30_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fb2', group = g07)
+bool  cisd_fib_n30       = input.bool(false, '-3', inline = 'fb2', group = g07)
+color cisd_fib_n35_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fb3', group = g07)
+bool  cisd_fib_n35       = input.bool(false, '-3.5', inline = 'fb3', group = g07)
+color cisd_fib_n40_color = input.color(color.new(primBearCol, 0), '', inline = 'fb3', group = g07)
+bool  cisd_fib_n40       = input.bool(true, '-4', inline = 'fb3', group = g07)
+color cisd_fib_n45_color = input.color(color.new(#4a4a4a, 0), '', inline = 'fb3', group = g07)
+bool  cisd_fib_n45       = input.bool(true, '-4.5', inline = 'fb3', group = g07)
+
+// ═════════════ 8. SMT ═════════════
+color  smt_text_col   = input.color(#f23645, 'SMT Text Color', group = g08)
+bool   smt_label_show = input.bool(true, 'Show Ticker Names on SMT Label', group = g08, tooltip = "ON: label reads like '90m XAGUSD' (timeframe + the assets that diverged). OFF: '90m SMT'. Hover a label for the full description.")
+string smtLblSize     = input.string(size.tiny, 'SMT Label Size', options = [size.tiny, size.small, size.normal], group = g08)
+bool   smtLblTwoLine  = input.bool(true, 'Two-Line Label (TF on top, tickers below)', group = g08)
+bool   smtLblDeclutter = input.bool(true, 'Declutter Overlapping Labels', group = g08, tooltip = "When two SMT / SSMT labels would land on top of each other, the new one is pushed further away from the line instead of overlapping.")
+float  smtLblGapAtr   = input.float(1.2, 'Declutter Step (x ATR)', minval = 0.2, step = 0.1, group = g08)
+int    smtLblXRange   = input.int(8, 'Declutter Horizontal Range (bars)', minval = 1, maxval = 60, group = g08)
+int    smtLblMaxStack = input.int(0, 'Declutter Max Stack', minval = 0, maxval = 4, group = g08, tooltip = "0 = a label that would overlap another is simply skipped (the line stays, labels never drift away from their line). 1+ = allow pushing the label that many steps away from the line before skipping.")
+bool   smtSkipDupSSMT = input.bool(true, 'Skip Chart SMT When SSMT Covers That TF', group = g08, tooltip = "The live HTF candle SMT and the closed-candle SSMT draw almost the same line on the same timeframe. ON: only the SSMT is shown for TFs where SSMT is enabled.")
+int    div_line_width = input.int(1, 'SMT Line Width', minval = 1, maxval = 3, group = g08)
+string div_line_style = input.string("Solid", 'SMT Line Style', options = ["Solid", "Dashed", "Dotted"], group = g08)
+color  smtBearCol = input.color(#9598a1, 'Bearish / Bullish SMT Line Colour', inline = 'sc1', group = g08)
+color  smtBullCol = input.color(#9598a1, '', inline = 'sc1', group = g08)
+// SMT timeframe switches
+bool   smt_en_15m = input.bool(true, '15m', inline = 'st1', group = g08)
+bool   smt_en_30m = input.bool(true, '30m', inline = 'st1', group = g08)
+bool   smt_en_1h  = input.bool(true, '1H',  inline = 'st1', group = g08)
+bool   smt_en_90m = input.bool(true, '90m', inline = 'st2', group = g08)
+bool   smt_en_4h  = input.bool(false, '4H',  inline = 'st2', group = g08)
+bool   smt_en_6h  = input.bool(true, '6H',  inline = 'st2', group = g08)
+bool   smt_en_7h  = input.bool(true, '7H',  inline = 'st3', group = g08)
+bool   smt_en_1d  = input.bool(false, '1D',  inline = 'st3', group = g08)
+bool   smt_en_1w  = input.bool(false, '1W',  inline = 'st3', group = g08)
+int    smtTolTicks  = input.int(2, 'Swing: Equal H/L Tolerance (ticks)', minval = 0, group = g08)
+int    smtMinAssets = input.int(1, 'Swing: Min Assets Diverging', minval = 1, maxval = 4, group = g08)
+bool   smtRejectEqual = input.bool(true, 'Reject Equal H/L on Correlated Assets', group = g08, tooltip = "GxT 3.3: if a correlated asset makes an equal high/low (within tolerance, measured in THAT asset's ticks) there is no clear divergence, so it is not counted. Applies to swing SMT and SSMT.")
+bool   smtInv1 = input.bool(false, 'Inverse A1', inline = 'si1', group = g08)
+bool   smtInv2 = input.bool(false, 'A2', inline = 'si1', group = g08)
+bool   smtInv3 = input.bool(false, 'A3', inline = 'si2', group = g08)
+bool   smtInv4 = input.bool(false, 'A4', inline = 'si2', group = g08)
+int    smtMax     = input.int(20, 'Swing: Max SMT Markings', minval = 5, maxval = 100, group = g08)
+bool   smtSwingOn = input.bool(false, 'Swing SMT (chart timeframe)', group = g08, tooltip = "Marks swing-high/low SMT on the chart timeframe itself (e.g. 5m labels). OFF by default: SMT is now marked per timeframe switch (15m to 1W) above.")
+
+// ═════════════ 8b. SSMT ═════════════
+bool   ssmtOn = input.bool(true, 'Enable SSMT (90m and above, 2 consecutive closed candles)', group = g08b, tooltip = "Compares the last two CLOSED HTF candles. The chart TF must be lower than the selected SSMT TF.")
+int    ssmt_line_width = input.int(1, 'SSMT Line Width', minval = 1, maxval = 3, group = g08b)
+string ssmt_line_style = input.string("Dashed", 'SSMT Line Style', options = ["Solid", "Dashed", "Dotted"], group = g08b, tooltip = "GxT 6.1: SSMT / candle SMT = dashed. Swing SMT = solid.")
+bool   ssmt_label_show = input.bool(true, 'Show Ticker Names on SSMT Label', group = g08b)
+color  ssmt_text_col = input.color(#f23645, 'SSMT Text Color', group = g08b)
+bool   ssmt_en_90m = input.bool(true, '90m', inline = 'sst2', group = g08b)
+bool   ssmt_en_4h  = input.bool(false, '4H',  inline = 'sst2', group = g08b)
+bool   ssmt_en_6h  = input.bool(true, '6H',  inline = 'sst2', group = g08b)
+bool   ssmt_en_7h  = input.bool(true, '7H',  inline = 'sst3', group = g08b)
+bool   ssmt_en_1d  = input.bool(false, '1D',  inline = 'sst3', group = g08b)
+bool   ssmt_en_1w  = input.bool(false, '1W',  inline = 'sst3', group = g08b)
+int    ssmtTolTicks = input.int(2, 'Equal H/L Tolerance (ticks)', minval = 0, group = g08b)
+int    ssmtMinAssets = input.int(1, 'Min Assets Diverging', minval = 1, maxval = 4, group = g08b)
+bool   ssmtInv1 = input.bool(false, 'Inverse A1', inline = 'ssi1', group = g08b)
+bool   ssmtInv2 = input.bool(false, 'A2', inline = 'ssi1', group = g08b)
+bool   ssmtInv3 = input.bool(false, 'A3', inline = 'ssi2', group = g08b)
+bool   ssmtInv4 = input.bool(false, 'A4', inline = 'ssi2', group = g08b, tooltip = "Tick for inversely correlated assets.")
+color  ssmtBearCol = input.color(#9598a1, 'Bearish / Bullish SSMT Line Colour', inline = 'ssc1', group = g08b)
+color  ssmtBullCol = input.color(#9598a1, '', inline = 'ssc1', group = g08b)
+int    ssmtMax = input.int(20, 'Max SSMT Markings', minval = 5, maxval = 100, group = g08b)
+
+// ═════════════ 9. FAIR VALUE GAPS (30m / 1H / 4H) ═════════════
+bool   fvgOn        = input.bool(true, 'Show FVGs (master switch)', group = g09)
+color  fvgMitCol    = input.color(color.new(#636363, 80), 'Mitigated Colour', group = g09)
+int    fvgBorderTr  = input.int(60, 'Border Transparency', minval = 0, maxval = 100, group = g09)
+bool   fvgNoOverlap = input.bool(true, 'Skip Overlapping FVGs', group = g09, tooltip = "Skips a new gap that overlaps an open gap of the same direction from an equal or higher timeframe.")
+int    fvgMax       = input.int(150, 'Max FVGs on Chart', minval = 10, maxval = 250, group = g09, tooltip = "Includes frozen (tapped) gaps. Oldest are removed first.")
+bool   fvgCE        = input.bool(true, 'Show CE (50%) Line', group = g09)
+int    fvgMaxVisible = input.int(4, 'Max Visible FVGs (nearest to price)', minval = 0, maxval = 30, group = g09, tooltip = 'Only the N unmitigated FVGs closest to the current price are drawn. Others stay tracked and reappear when price gets closer. 0 = no limit.')
+bool   fvgHideNested = input.bool(true, 'Hide FVG Inside Higher-TF FVG', group = g09, tooltip = 'A 30m/1H gap that sits inside an active 1H/4H gap of the same direction is hidden, so stacked zones do not pile up.')
+bool   fvgFreezeMit   = input.bool(true, 'Freeze Mitigated FVGs (keep on chart)', group = g09, tooltip = 'ON: when price taps a gap it FREEZES (stops extending, turns grey) and stays on the chart until fully broken through. OFF: a tapped gap is deleted immediately. The per-timeframe "Delete When Mitigated" switches still force deletion for that timeframe.')
+// Shared daily ATR controls, adapted from po3 2.txt (all FVG timeframes).
+bool   fvgAtrVisible = input.bool(true, 'ATR Dynamic Visibility', group = g09, tooltip = 'Only draw FVGs near the current price. Distant FVGs remain tracked and reappear when price approaches.')
+float  fvgMaxDistAtr = input.float(1.0, 'Max Distance (x Daily ATR)', minval = 0.0, step = 0.25, group = g09, tooltip = '0 disables the distance restriction.')
+float  fvgMinGapAtr = input.float(0.08, 'Min Gap Size (x Daily ATR)', minval = 0.0, step = 0.01, group = g09, tooltip = 'Additional minimum FVG size; 0 disables this filter. Per-timeframe minimum tick sizes still apply.')
+int    fvgExt       = input.int(15, 'Extension Bars', minval = 1, maxval = 400, group = g09)
+string fvgLblSize   = input.string(size.tiny, 'Label Size', options = [size.tiny, size.small, size.normal], group = g09)
+bool   fvgShow30  = input.bool(false, '30m', inline = 'fvg30m', group = g09a)
+color  fvgBull30  = input.color(color.new(#26a69a, 85), '', inline = 'fvg30m', group = g09a)
+color  fvgBear30  = input.color(color.new(#ef5350, 85), '', inline = 'fvg30m', group = g09a)
+string fvgMit30   = input.string(FVG_MIT_WICK, 'Mitigation Rule', options = [FVG_MIT_CLOSE, FVG_MIT_WICK, FVG_MIT_FULL], group = g09a)
+bool   fvgKill30  = input.bool(false, 'Delete When Mitigated', group = g09a)
+int    fvgMin30   = input.int(1, 'Min Gap Size (ticks)', minval = 0, group = g09a)
+bool   fvgLbl30   = input.bool(true, 'Show Label', group = g09a)
+
+bool   fvgShow60  = input.bool(false, '1H', inline = 'fvg1H', group = g09b)
+color  fvgBull60  = input.color(color.new(#26a69a, 85), '', inline = 'fvg1H', group = g09b)
+color  fvgBear60  = input.color(color.new(#ef5350, 85), '', inline = 'fvg1H', group = g09b)
+string fvgMit60   = input.string(FVG_MIT_WICK, 'Mitigation Rule', options = [FVG_MIT_CLOSE, FVG_MIT_WICK, FVG_MIT_FULL], group = g09b)
+bool   fvgKill60  = input.bool(false, 'Delete When Mitigated', group = g09b)
+int    fvgMin60   = input.int(1, 'Min Gap Size (ticks)', minval = 0, group = g09b)
+bool   fvgLbl60   = input.bool(true, 'Show Label', group = g09b)
+
+bool   fvgShow240 = input.bool(false, '4H', inline = 'fvg4H', group = g09c)
+color  fvgBull240 = input.color(color.new(#26a69a, 85), '', inline = 'fvg4H', group = g09c)
+color  fvgBear240 = input.color(color.new(#ef5350, 85), '', inline = 'fvg4H', group = g09c)
+string fvgMit240  = input.string(FVG_MIT_WICK, 'Mitigation Rule', options = [FVG_MIT_CLOSE, FVG_MIT_WICK, FVG_MIT_FULL], group = g09c)
+bool   fvgKill240 = input.bool(false, 'Delete When Mitigated', group = g09c)
+int    fvgMin240  = input.int(1, 'Min Gap Size (ticks)', minval = 0, group = g09c)
+bool   fvgLbl240  = input.bool(true, 'Show Label', group = g09c)
+
+// ═════════════ 10. HTF IMBALANCES ═════════════
+bool  in_htfFvgOn  = input.bool(true, 'HTF FVG', inline = 'hi1', group = g10)
+color in_htfFvgCol = input.color(color.new(C_GRAY, 80), '', inline = 'hi1', group = g10)
+bool  in_htfViOn   = input.bool(true, 'HTF Volume Imbalance', inline = 'hi2', group = g10)
+color in_htfViCol  = input.color(color.new(C_RED, 50), '', inline = 'hi2', group = g10)
+
+// ═════════════ 11. XC2 ═════════════
+bool   hideRC           = input.bool(false, 'Hide XC2', group = g13)
+bool   requireColors    = input.bool(false, 'Require Opposite C1/C2 Colors', group = g13)
+bool   requireCloseBack = input.bool(true, 'Require C2 Close Back Inside', group = g13)
+int    maxMarks         = input.int(100, 'Recent XC2 Markings', minval = 2, maxval = 200, group = g13)
+color  rcColor          = input.color(color.black, 'Line Color / Width', inline = 'xc1', group = g13)
+int    rcWidth          = input.int(1, '', minval = 1, maxval = 5, inline = 'xc1', group = g13)
+string rcStyleInput     = input.string("Solid", 'Line Style', options = ["Solid", "Dotted", "Dashed"], group = g13)
+bool   showLabels       = input.bool(true, 'Show XC2 Labels', inline = 'xc2', group = g13)
+color  labelColor       = input.color(color.black, '', inline = 'xc2', group = g13)
+string labelSizeInput   = input.string("Small", '', options = ["Tiny", "Small", "Normal", "Large"], inline = 'xc2', group = g13)
+
+// ═════════════ 12. SESSION OPENS ═════════════
+bool showWO  = input.bool(true, 'Show W.O (Sun 18:00)', group = g14)
+bool showDO  = input.bool(true, 'Show D.O (18:00)', group = g14)
+bool showMID = input.bool(true, 'Show Midnight (00:00)', group = g14)
+bool showNY  = input.bool(true, 'Show NY Open (9:30)', group = g14)
+bool showTEN = input.bool(true, 'Show NY Ref (10:00)', group = g14)
+bool showLvlLabels = input.bool(true, 'Show Labels', group = g14)
+bool showPrior     = input.bool(false, 'Show Previous Levels', group = g14)
+
+// ═════════════ 13. REFERENCE STYLE ═════════════
+color  lineColor    = input.color(color.rgb(120, 123, 134), 'Line Color', group = g15)
+string lineStyle    = input.string("Dotted", 'Line Style', options = ["Solid", "Dashed", "Dotted"], inline = 'rs1', group = g15)
+int    lineWidth    = input.int(1, 'Width', minval = 1, maxval = 5, inline = 'rs1', group = g15)
+color  lvlTextColor = input.color(color.rgb(120, 123, 134), 'Text Color', inline = 'rs2', group = g15)
+string lvlTextSize  = input.string(size.small, 'Text Size', options = [size.tiny, size.small, size.normal], inline = 'rs2', group = g15)
+
+// ═════════════ 14. SEPARATORS ═════════════
+bool   in_sepShow    = input.bool(true, 'HTF Separators', inline = 'sp1', group = g16)
+color  in_htfSepCol  = input.color(C_GRAY, '', inline = 'sp1', group = g16)
+bool   enableChartSeparators = input.bool(false, 'Chart Separators', inline = 'sp2', group = g16)
+string sepSelection  = input.string("Auto", '', options = ["Auto", "15m", "30m", "1H", "4H", "1D", "1W"], inline = 'sp2', group = g16)
+int    sepLookback   = input.int(150, 'Lookback Bars', minval = 20, maxval = 500, group = g16)
+bool   sepShowLabel  = input.bool(true, 'Show Timestamp', group = g16)
+color  sepColor      = input.color(color.new(#787b86, 70), 'Line / Text Color', inline = 'sp3', group = g16)
+color  sepTextColor  = input.color(#787b86, '', inline = 'sp3', group = g16)
+int    sepWidth      = input.int(1, 'Line Width', minval = 1, maxval = 5, group = g16)
+
+// ═════════════ 17. PSP + SMT CONFLUENCE ═════════════
+bool   confOn      = input.bool(true, 'Enable PSP + SMT Confluence', group = g17, tooltip = "Fires when a PSP and an SMT / SSMT in the SAME direction land within the memory window. PSP is detected on the 3 HTF candle timeframes (section 3) and needs 'Enable PSP?' ON.")
+int    conf_window = input.int(3, 'Confluence Memory Window (bars)', minval = 0, maxval = 10, group = g17, tooltip = "Chart bars. PSP and SMT are architecturally 1-2 bars apart, so 3 captures the natural offset.")
+bool   conf_reset  = input.bool(true, 'Auto-Reset After Fire', group = g17, tooltip = "Clears both registers after a confluence fires: one setup = one alert.")
+bool   confMarks   = input.bool(true, 'Mark Confluence on Chart', group = g17)
+
+// ═════════════ 18. INFO TABLE / DASHBOARD ═════════════
+bool   tblShow = input.bool(true, 'Show Info Table', group = g18)
+string tblPosIn = input.string('Top Right', 'Dashboard Position', options = ['Top Right', 'Top Left', 'Top Center', 'Bottom Right', 'Bottom Left', 'Bottom Center'], group = g18)
+color  tblTakenCol = input.color(#4caf50, 'Taken Color (✓)', group = g18)
+color  tblNotCol   = input.color(#ff5252, 'Not Taken Color (✗)', group = g18)
+string tblSize = input.string(size.small, 'Table Text Size', options = [size.tiny, size.small, size.normal], group = g18)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ▼▼▼ SCRIPT 1: CISD Detection Engine ▼▼▼
+// ═══════════════════════════════════════════════════════════════════════════
+
+const bool CISD_FIB_ENGINE = true
+int CISD_FIB_MIN_SPACING_MS = cisd_fib_min_minutes * 60 * 1000
+int pivot_len = 1
+bool pivot_delete_on_cross = true
+bool cisd_invalidate_on_cross = true
+
+string cisd_sensitivity     = 'Standard'
+int    cisd_pending_timeout = cisd_sensitivity == 'Standard' ? 10 : 20
+bool   cisd_exhaustive      = false
+
+type CISDStretch
+    bool bullish
+    int origin_bar
+    float level
+    int end_bar
+    float end_close
+    float origin_high
+    float origin_low
+    int run_ext_bar
+    float run_ext_price
+
+type PendingCISD
+    CISDStretch stretch
+    int pivot_bar
+    int start_bar
+    line pending_line
+
+type ConfirmedCISD
+    CISDStretch stretch
+    int pivot_bar
+    float pivot_price
+    int confirmation_bar
+    line confirmed_line
+    label confirm_shape
+    bool is_invalidated = false
+
+type PivotData
+    int bar_idx
+    float price
+    bool is_high
+    bool has_purge
+
+type PurgeTracker
+    int pivot_bar
+    bool is_high
+    int purge_bar
+
+type CISDFibProjection
+    int cisd_pivot_bar
+    bool is_bullish
+    array<line> fib_lines
+    array<label> fib_labels
+    int confirmation_bar = 0
+    int confirmation_time = 0
+
+var array<PendingCISD> pending_cisd = array.new<PendingCISD>()
+var array<ConfirmedCISD> confirmed_cisd = array.new<ConfirmedCISD>()
+var array<CISDFibProjection> cisd_fib_projections = array.new<CISDFibProjection>()
+var array<PivotData> pivot_highs = array.new<PivotData>()
+var array<PivotData> pivot_lows = array.new<PivotData>()
+var array<PurgeTracker> purge_tracker = array.new<PurgeTracker>()
+
+deleteFibProjection(fp) =>
+    if array.size(fp.fib_lines) > 0
+        for i = 0 to array.size(fp.fib_lines) - 1
+            line.delete(array.get(fp.fib_lines, i))
+    if array.size(fp.fib_labels) > 0
+        for i = 0 to array.size(fp.fib_labels) - 1
+            label.delete(array.get(fp.fib_labels, i))
+
+removeFibProjectionByPivotBar(pivotBar, bool bullish) =>
+    if array.size(cisd_fib_projections) > 0
+        for i = array.size(cisd_fib_projections) - 1 to 0
+            fp = array.get(cisd_fib_projections, i)
+            if fp.cisd_pivot_bar == pivotBar and fp.is_bullish == bullish
+                deleteFibProjection(fp)
+                array.remove(cisd_fib_projections, i)
+
+removeCISDByPivotBar(pivotBar, bool bullish) =>
+    if array.size(pending_cisd) > 0
+        for i = array.size(pending_cisd) - 1 to 0
+            item = array.get(pending_cisd, i)
+            if item.pivot_bar == pivotBar and item.stretch.bullish == bullish
+                line.delete(item.pending_line)
+                array.remove(pending_cisd, i)
+    if array.size(confirmed_cisd) > 0
+        for i = array.size(confirmed_cisd) - 1 to 0
+            ci = array.get(confirmed_cisd, i)
+            if ci.pivot_bar == pivotBar and ci.stretch.bullish == bullish
+                line.delete(ci.confirmed_line)
+                label.delete(ci.confirm_shape)
+                array.remove(confirmed_cisd, i)
+    removeFibProjectionByPivotBar(pivotBar, bullish)
+
+hasPurgeForCISD(pivotBar, bullishCISD, tolerance) =>
+    bool hasPurge = false
+    if array.size(purge_tracker) > 0
+        for i = 0 to array.size(purge_tracker) - 1
+            pt = array.get(purge_tracker, i)
+            int barDistance = math.abs(pivotBar - pt.purge_bar)
+            if barDistance <= tolerance
+                if bullishCISD and not pt.is_high
+                    hasPurge := true
+                else if not bullishCISD and pt.is_high
+                    hasPurge := true
+    hasPurge
+
+isPropulsionBlock(bool bullish, float extreme, int extremeBar, int maxAge) =>
+    bool prop = false
+    if array.size(confirmed_cisd) > 0
+        for i = 0 to array.size(confirmed_cisd) - 1
+            ci = array.get(confirmed_cisd, i)
+            int age = extremeBar - ci.confirmation_bar
+            if ci.stretch.bullish == bullish and age >= 0 and age <= maxAge
+                float zTop = math.max(ci.stretch.level, ci.pivot_price)
+                float zBot = math.min(ci.stretch.level, ci.pivot_price)
+                if extreme >= zBot and extreme <= zTop
+                    prop := true
+                    break
+    prop
+
+countFibProjections(isBullish) =>
+    int count = 0
+    if array.size(cisd_fib_projections) > 0
+        for i = 0 to array.size(cisd_fib_projections) - 1
+            fp = array.get(cisd_fib_projections, i)
+            if fp.is_bullish == isBullish
+                count += 1
+    count
+
+mostRecentFibTime(isBullish) =>
+    int t = 0
+    if array.size(cisd_fib_projections) > 0
+        for i = 0 to array.size(cisd_fib_projections) - 1
+            fp = array.get(cisd_fib_projections, i)
+            if fp.is_bullish == isBullish and fp.confirmation_time > t
+                t := fp.confirmation_time
+    t
+
+removeOldestFibForDir(isBull) =>
+    int idx = -1
+    if array.size(cisd_fib_projections) > 0
+        for i = 0 to array.size(cisd_fib_projections) - 1
+            fp = array.get(cisd_fib_projections, i)
+            if fp.is_bullish == isBull
+                idx := i
+                break
+    if idx >= 0
+        deleteFibProjection(array.get(cisd_fib_projections, idx))
+        array.remove(cisd_fib_projections, idx)
+        true
+    else
+        false
+
+enforceFibMax(maxPerDirection) =>
+    while countFibProjections(true) > maxPerDirection
+        if not removeOldestFibForDir(true)
+            break
+    while countFibProjections(false) > maxPerDirection
+        if not removeOldestFibForDir(false)
+            break
+
+bool cisd_fib_show = CISD_FIB_ENGINE and cisd_fib_show_raw
+var bool BIAS_BEAR = cisd_bias == 'Auto' or cisd_bias == 'Bearish'
+var bool BIAS_BULL = cisd_bias == 'Auto' or cisd_bias == 'Bullish'
+
+isBullBody(i) => close[i] > open[i]
+isBearBody(i) => close[i] < open[i]
+float cisd_atr = ta.atr(14)
+getCISDMinATRMult(preset) => preset == 'Really small' ? 0.1 : preset == 'Small' ? 0.25 : preset == 'Sizeable' ? 0.66 : preset == 'Juicy' ? 1.0 : 0.5
+
+computeInitialStretch(bullishPivot, pivotOffset, sizeFilter, atrMult) =>
+    maxScan = 300
+    if bullishPivot
+        endOffset = -1
+        for k = pivotOffset to pivotOffset + maxScan
+            if isBearBody(k)
+                endOffset := k
+                break
+        if endOffset == -1
+            [0, 0.0, 0, 0.0, false, 0.0, 0.0, 0, 0.0]
+        else
+            originOffset = endOffset
+            for k = endOffset + 1 to endOffset + maxScan
+                if isBearBody(k)
+                    originOffset := k
+                else
+                    break
+            int runExtOff = pivotOffset
+            float runExtLow = low[pivotOffset]
+            for k = pivotOffset to originOffset
+                if low[k] < runExtLow
+                    runExtLow := low[k]
+                    runExtOff := k
+            stretchBodySize = math.abs(open[originOffset] - close[endOffset])
+            minStretchSize = cisd_atr * atrMult
+            passesFilter = sizeFilter ? stretchBodySize >= minStretchSize : true
+            [originOffset, open[originOffset], endOffset, close[endOffset], passesFilter, high[originOffset], low[originOffset], runExtOff, runExtLow]
+    else
+        endOffset = -1
+        for k = pivotOffset to pivotOffset + maxScan
+            if isBullBody(k)
+                endOffset := k
+                break
+        if endOffset == -1
+            [0, 0.0, 0, 0.0, false, 0.0, 0.0, 0, 0.0]
+        else
+            originOffset = endOffset
+            for k = endOffset + 1 to endOffset + maxScan
+                if isBullBody(k)
+                    originOffset := k
+                else
+                    break
+            int runExtOff = pivotOffset
+            float runExtHigh = high[pivotOffset]
+            for k = pivotOffset to originOffset
+                if high[k] > runExtHigh
+                    runExtHigh := high[k]
+                    runExtOff := k
+            stretchBodySize = math.abs(open[originOffset] - close[endOffset])
+            minStretchSize = cisd_atr * atrMult
+            passesFilter = sizeFilter ? stretchBodySize >= minStretchSize : true
+            [originOffset, open[originOffset], endOffset, close[endOffset], passesFilter, high[originOffset], low[originOffset], runExtOff, runExtHigh]
+
+recomputeStretchIfExtended(PendingCISD p) =>
+    _bull = p.stretch.bullish
+    if _bull and isBearBody(0) and close < p.stretch.end_close
+        float newExtPx = math.min(p.stretch.run_ext_price, low)
+        int newExtBar = low < p.stretch.run_ext_price ? bar_index : p.stretch.run_ext_bar
+        [true, p.stretch.origin_bar, p.stretch.level, bar_index, close, newExtBar, newExtPx]
+    else if (not _bull) and isBullBody(0) and close > p.stretch.end_close
+        float newExtPx = math.max(p.stretch.run_ext_price, high)
+        int newExtBar = high > p.stretch.run_ext_price ? bar_index : p.stretch.run_ext_bar
+        [true, p.stretch.origin_bar, p.stretch.level, bar_index, close, newExtBar, newExtPx]
+    else
+        [false, p.stretch.origin_bar, p.stretch.level, p.stretch.end_bar, p.stretch.end_close, p.stretch.run_ext_bar, p.stretch.run_ext_price]
+
+drawCisdFibLevel(bool enabled, float multiplier, color lvlColor, string lvlText, int startBar, int endBar, float endPrice, float fibDirection, color transpColor, array<line> fibLines, array<label> fibLabels) =>
+    if enabled
+        float price = endPrice + (fibDirection * multiplier)
+        ln = line.new(startBar, price, endBar, price, color = lvlColor, style = line.style_solid, width = 1)
+        array.push(fibLines, ln)
+        if lvlText != ''
+            lbl = label.new(startBar, price, lvlText, color = transpColor, style = label.style_label_right, textcolor = lvlColor, size = size.tiny, textalign = text.align_center)
+            array.push(fibLabels, lbl)
+
+renderCISDFibs(ci, useWick) =>
+    CISDFibProjection result = na
+    bool isBullishCISD = ci.stretch.bullish
+    float originPrice = na
+    float endPrice = na
+    if useWick
+        if isBullishCISD
+            originPrice := ci.stretch.origin_high
+            endPrice := ci.stretch.run_ext_price
+        else
+            originPrice := ci.stretch.origin_low
+            endPrice := ci.stretch.run_ext_price
+    else
+        originPrice := ci.stretch.level
+        endPrice := ci.stretch.end_close
+    float stretchRange = endPrice - originPrice
+    float fibDirection = -stretchRange
+    int startBar = ci.stretch.origin_bar
+    int endBar = ci.confirmation_bar
+    array<line> fibLines = array.new<line>()
+    array<label> fibLabels = array.new<label>()
+    color transpColor = color.new(#ffffff, 100)
+    color refColor = color.new(#4a4a4a, 50)
+    drawCisdFibLevel(true, 0.0, refColor, '', startBar, endBar, endPrice, fibDirection, transpColor, fibLines, fibLabels)
+    drawCisdFibLevel(true, 1.0, refColor, '', startBar, endBar, endPrice, fibDirection, transpColor, fibLines, fibLabels)
+    drawCisdFibLevel(cisd_fib_n05, 1.5, cisd_fib_n05_color, '-0.5', startBar, endBar, endPrice, fibDirection, transpColor, fibLines, fibLabels)
+    drawCisdFibLevel(cisd_fib_n10, 2.0, cisd_fib_n10_color, '-1 ', startBar, endBar, endPrice, fibDirection, transpColor, fibLines, fibLabels)
+    drawCisdFibLevel(cisd_fib_n15, 2.5, cisd_fib_n15_color, '-1.5', startBar, endBar, endPrice, fibDirection, transpColor, fibLines, fibLabels)
+    drawCisdFibLevel(cisd_fib_n20, 3.0, cisd_fib_n20_color, '-2 ', startBar, endBar, endPrice, fibDirection, transpColor, fibLines, fibLabels)
+    drawCisdFibLevel(cisd_fib_n25, 3.5, cisd_fib_n25_color, '-2.5 ', startBar, endBar, endPrice, fibDirection, transpColor, fibLines, fibLabels)
+    drawCisdFibLevel(cisd_fib_n30, 4.0, cisd_fib_n30_color, '-3 ', startBar, endBar, endPrice, fibDirection, transpColor, fibLines, fibLabels)
+    drawCisdFibLevel(cisd_fib_n35, 4.5, cisd_fib_n35_color, '-3.5', startBar, endBar, endPrice, fibDirection, transpColor, fibLines, fibLabels)
+    drawCisdFibLevel(cisd_fib_n40, 5.0, cisd_fib_n40_color, '-4 ', startBar, endBar, endPrice, fibDirection, transpColor, fibLines, fibLabels)
+    drawCisdFibLevel(cisd_fib_n45, 5.5, cisd_fib_n45_color, '-4.5 ', startBar, endBar, endPrice, fibDirection, transpColor, fibLines, fibLabels)
+    result := CISDFibProjection.new(ci.pivot_bar, isBullishCISD, fibLines, fibLabels, confirmation_bar = ci.confirmation_bar, confirmation_time = time)
+    result
+
+float pivotHigh = ta.pivothigh(pivot_len, pivot_len)
+float pivotLow = ta.pivotlow(pivot_len, pivot_len)
+float cisd_atr_mult = getCISDMinATRMult(cisd_size_preset)
+
+addPivot(float level, float price, bool isHigh, array<PivotData> arr) =>
+    if bool(level)
+        array.push(arr, PivotData.new(bar_index - pivot_len, price, isHigh, false))
+
+addPivot(pivotHigh, high[pivot_len], true, pivot_highs)
+addPivot(pivotLow, low[pivot_len], false, pivot_lows)
+
+if pivot_delete_on_cross and array.size(pivot_highs) > 0
+    for i = array.size(pivot_highs) - 1 to 0
+        pd = array.get(pivot_highs, i)
+        if high > pd.price
+            pt = PurgeTracker.new(pd.bar_idx, true, bar_index)
+            array.push(purge_tracker, pt)
+            pd.has_purge := true
+            array.remove(pivot_highs, i)
+            if inp_cisd_show
+                if cisd_exhaustive
+                    if array.size(confirmed_cisd) > 0
+                        for j = array.size(confirmed_cisd) - 1 to 0
+                            ci = array.get(confirmed_cisd, j)
+                            if ci.pivot_bar == pd.bar_idx and not ci.stretch.bullish and not ci.is_invalidated
+                                ci.is_invalidated := true
+                                line.set_style(ci.confirmed_line, line.style_dashed)
+                                line.set_width(ci.confirmed_line, 1)
+                    if array.size(pending_cisd) > 0
+                        for j = array.size(pending_cisd) - 1 to 0
+                            item = array.get(pending_cisd, j)
+                            if item.pivot_bar == pd.bar_idx and not item.stretch.bullish
+                                line.delete(item.pending_line)
+                                array.remove(pending_cisd, j)
+                else
+                    removeCISDByPivotBar(pd.bar_idx, false)
+
+if pivot_delete_on_cross and array.size(pivot_lows) > 0
+    for i = array.size(pivot_lows) - 1 to 0
+        pd = array.get(pivot_lows, i)
+        if low < pd.price
+            pt = PurgeTracker.new(pd.bar_idx, false, bar_index)
+            array.push(purge_tracker, pt)
+            pd.has_purge := true
+            array.remove(pivot_lows, i)
+            if inp_cisd_show
+                if cisd_exhaustive
+                    if array.size(confirmed_cisd) > 0
+                        for j = array.size(confirmed_cisd) - 1 to 0
+                            ci = array.get(confirmed_cisd, j)
+                            if ci.pivot_bar == pd.bar_idx and ci.stretch.bullish and not ci.is_invalidated
+                                ci.is_invalidated := true
+                                line.set_style(ci.confirmed_line, line.style_dashed)
+                                line.set_width(ci.confirmed_line, 1)
+                    if array.size(pending_cisd) > 0
+                        for j = array.size(pending_cisd) - 1 to 0
+                            item = array.get(pending_cisd, j)
+                            if item.pivot_bar == pd.bar_idx and item.stretch.bullish
+                                line.delete(item.pending_line)
+                                array.remove(pending_cisd, j)
+                else
+                    removeCISDByPivotBar(pd.bar_idx, true)
+
+if inp_cisd_show and cisd_invalidate_on_cross and array.size(confirmed_cisd) > 0
+    for i = array.size(confirmed_cisd) - 1 to 0
+        ci = array.get(confirmed_cisd, i)
+        if ci.is_invalidated
+            continue
+        bool shouldRemove = false
+        if ci.stretch.bullish and low < ci.pivot_price
+            shouldRemove := true
+        else if not ci.stretch.bullish and high > ci.pivot_price
+            shouldRemove := true
+        if shouldRemove
+            if cisd_exhaustive
+                ci.is_invalidated := true
+                line.set_style(ci.confirmed_line, line.style_dashed)
+                line.set_width(ci.confirmed_line, 1)
+                removeFibProjectionByPivotBar(ci.pivot_bar, ci.stretch.bullish)
+            else
+                line.delete(ci.confirmed_line)
+                label.delete(ci.confirm_shape)
+                array.remove(confirmed_cisd, i)
+                removeFibProjectionByPivotBar(ci.pivot_bar, ci.stretch.bullish)
+
+if inp_cisd_show and bool(pivotHigh) and BIAS_BEAR
+    [originOff, lvl, endOff, endCls, stretchPassesFilter, origH, origL, runExtOff, runExtPx] = computeInitialStretch(false, pivot_len, cisd_size_filter, cisd_atr_mult)
+    origin_bar = bar_index - originOff
+    end_bar = bar_index - endOff
+    run_ext_bar = bar_index - runExtOff
+    pivot_bar = bar_index - pivot_len
+    purge_ok = not cisd_purge_filter or hasPurgeForCISD(pivot_bar, false, cisd_purge_tolerance)
+    if stretchPassesFilter and purge_ok
+        if array.size(pending_cisd) > 0
+            for ii = array.size(pending_cisd) - 1 to 0
+                it = array.get(pending_cisd, ii)
+                if not it.stretch.bullish
+                    line.delete(it.pending_line)
+                    array.remove(pending_cisd, ii)
+        ln = line.new(origin_bar, lvl, bar_index, lvl, color = cisd_color_bear, style = line.style_dotted, width = 1)
+        st = CISDStretch.new(false, origin_bar, lvl, end_bar, endCls, origH, origL, run_ext_bar, runExtPx)
+        array.push(pending_cisd, PendingCISD.new(st, pivot_bar, bar_index, ln))
+
+if inp_cisd_show and bool(pivotLow) and BIAS_BULL
+    [originOffB, lvlB, endOffB, endClsB, stretchPassesFilterB, origHB, origLB, runExtOffB, runExtPxB] = computeInitialStretch(true, pivot_len, cisd_size_filter, cisd_atr_mult)
+    origin_bar_b = bar_index - originOffB
+    end_bar_b = bar_index - endOffB
+    run_ext_bar_b = bar_index - runExtOffB
+    pivot_bar_b = bar_index - pivot_len
+    purge_ok_b = not cisd_purge_filter or hasPurgeForCISD(pivot_bar_b, true, cisd_purge_tolerance)
+    if stretchPassesFilterB and purge_ok_b
+        if array.size(pending_cisd) > 0
+            for ii = array.size(pending_cisd) - 1 to 0
+                it = array.get(pending_cisd, ii)
+                if it.stretch.bullish
+                    line.delete(it.pending_line)
+                    array.remove(pending_cisd, ii)
+        lnB = line.new(origin_bar_b, lvlB, bar_index, lvlB, color = cisd_color_bull, style = line.style_dotted, width = 1)
+        stB = CISDStretch.new(true, origin_bar_b, lvlB, end_bar_b, endClsB, origHB, origLB, run_ext_bar_b, runExtPxB)
+        array.push(pending_cisd, PendingCISD.new(stB, pivot_bar_b, bar_index, lnB))
+
+// ALERT FLAGS — set true on the bar a CISD is confirmed (consumed by alertcondition at the bottom)
+bool cisdBullConf = false
+bool cisdBearConf = false
+
+if inp_cisd_show and array.size(pending_cisd) > 0
+    for i = array.size(pending_cisd) - 1 to 0
+        p = array.get(pending_cisd, i)
+        if bar_index - p.start_bar >= cisd_pending_timeout
+            line.delete(p.pending_line)
+            array.remove(pending_cisd, i)
+            continue
+        [updated, new_origin_bar, new_level, new_end_bar, new_end_close, new_run_ext_bar, new_run_ext_price] = recomputeStretchIfExtended(p)
+        if updated
+            line.set_x1(p.pending_line, new_origin_bar)
+            line.set_y1(p.pending_line, new_level)
+            line.set_y2(p.pending_line, new_level)
+            p.stretch.origin_bar := new_origin_bar
+            p.stretch.level := new_level
+            p.stretch.end_bar := new_end_bar
+            p.stretch.end_close := new_end_close
+            p.stretch.run_ext_bar := new_run_ext_bar
+            p.stretch.run_ext_price := new_run_ext_price
+            array.set(pending_cisd, i, p)
+            line.set_x2(p.pending_line, bar_index)
+        confirm_ok = p.stretch.bullish ? close > p.stretch.level : close < p.stretch.level
+        if confirm_ok
+            x1_c = p.stretch.origin_bar
+            x2_c = bar_index + cisd_offset
+            y_c = p.stretch.level
+            bool isProp = isPropulsionBlock(p.stretch.bullish, p.stretch.run_ext_price, p.stretch.run_ext_bar, cisd_pending_timeout)
+            cisdColor = p.stretch.bullish ? cisd_color_bull : cisd_color_bear
+            ln_c = line.new(x1_c, y_c, x2_c, y_c, color = cisdColor, style = line.style_solid, width = isProp ? 1 : 2)
+            yloc_ = p.stretch.bullish ? yloc.belowbar : yloc.abovebar
+            shp = label.new(bar_index, close, style = label.style_circle, text = '', size = size.auto, color = C_TRANSPARENT, textcolor = cisdColor, yloc = yloc_)
+            float pivotPriceForCISD = p.stretch.bullish ? low[bar_index - p.pivot_bar] : high[bar_index - p.pivot_bar]
+            ci = ConfirmedCISD.new(p.stretch, p.pivot_bar, pivotPriceForCISD, bar_index, ln_c, shp)
+            array.push(confirmed_cisd, ci)
+            if p.stretch.bullish
+                cisdBullConf := true
+            else
+                cisdBearConf := true
+            if cisd_fib_show and (cisd_fib_prop or not isProp)
+                bool fib_spacing_ok = true
+                if timeframe.in_seconds() < 3600
+                    int lastFibTime = mostRecentFibTime(p.stretch.bullish)
+                    if lastFibTime > 0 and time - lastFibTime < CISD_FIB_MIN_SPACING_MS
+                        fib_spacing_ok := false
+                if fib_spacing_ok
+                    useWick = cisd_fib_mode == 'Wick'
+                    fibProj = renderCISDFibs(ci, useWick)
+                    if not na(fibProj)
+                        array.push(cisd_fib_projections, fibProj)
+                    enforceFibMax(cisd_fib_max)
+            line.delete(p.pending_line)
+            array.remove(pending_cisd, i)
+
+while array.size(purge_tracker) > 100
+    array.shift(purge_tracker)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ▼▼▼ SCRIPT 2: HTF Candles + SMT Integration ▼▼▼
+// ═══════════════════════════════════════════════════════════════════════════
+
+type Candle
+    float o
+    float c
+    float h
+    float l
+    int o_time
+    int bar_idx
+    int high_bar_idx
+    int low_bar_idx
+    string dow
+    box body
+    line wick_up
+    line wick_down
+    line sweep_high_line
+    line sweep_low_line
+    line smt_high_line
+    line smt_low_line
+    label smt_label
+    float smt_h1
+    float smt_l1
+    float smt_h2
+    float smt_l2
+    float smt_h3
+    float smt_l3
+    float smt_h4
+    float smt_l4
+    bool smt_use1
+    bool smt_use2
+    bool smt_use3
+    bool smt_use4
+    bool smt_valid1
+    bool smt_valid2
+    bool smt_valid3
+    bool smt_valid4
+
+type Imbalance
+    box b
+    int idx
+
+type CandleSettings
+    bool show
+    string htf
+    int max_display
+    float own_o
+    float own_h
+    float own_l
+    float own_c
+    float sym1_o
+    float sym1_c
+    float sym1_h
+    float sym1_l
+    int sym1_t
+    float sym2_o
+    float sym2_c
+    float sym2_h
+    float sym2_l
+    int sym2_t
+    float sym3_o
+    float sym3_c
+    float sym3_h
+    float sym3_l
+    int sym3_t
+    float sym4_o
+    float sym4_c
+    float sym4_h
+    float sym4_l
+    int sym4_t
+
+type Settings
+    color bull_body
+    color bull_border
+    color bull_wick
+    color bear_body
+    color bear_border
+    color bear_wick
+    int offset
+    int buffer
+    int htf_buffer
+    int width
+    string label_position
+    string label_alignment
+    bool fvg_show
+    color fvg_color
+    bool vi_show
+    color vi_color
+    bool htf_label_show
+    color htf_label_color
+    string htf_label_size
+    bool htf_timer_show
+    color htf_timer_color
+    string htf_timer_size
+    bool psp_show
+    bool psp_sym1_use
+    string psp_sym1
+    bool psp_sym2_use
+    string psp_sym2
+    bool psp_sym3_use
+    string psp_sym3
+    bool psp_sym4_use
+    string psp_sym4
+    color psp_up_body
+    color psp_down_body
+    bool sweep_show
+    color sweep_color
+    bool smt_show
+    bool smt_label_show
+    bool smt_show_sym1
+    bool smt_show_sym2
+    bool smt_show_sym3
+    bool show_sep
+    color sep_color
+    string sep_style
+    int sep_width
+    bool enableSMT
+    bool showChartSMT
+    bool showHTFSMT
+
+type CandleSet
+    array<Candle> candles
+    array<Imbalance> imbalances
+    CandleSettings settings
+    label tfNameTop
+    label tfNameBottom
+    label tfTimerTop
+    label tfTimerBottom
+
+Settings settings = Settings.new()
+var CandleSettings SettingsHTF1 = CandleSettings.new()
+var CandleSettings SettingsHTF2 = CandleSettings.new()
+var CandleSettings SettingsHTF3 = CandleSettings.new()
+var array<Candle> candles_1 = array.new<Candle>(0)
+var array<Candle> candles_2 = array.new<Candle>(0)
+var array<Candle> candles_3 = array.new<Candle>(0)
+var array<Imbalance> imbalances_1 = array.new<Imbalance>()
+var array<Imbalance> imbalances_2 = array.new<Imbalance>()
+var array<Imbalance> imbalances_3 = array.new<Imbalance>()
+
+var CandleSet htf1 = CandleSet.new()
+htf1.settings := SettingsHTF1
+htf1.candles := candles_1
+htf1.imbalances := imbalances_1
+
+var CandleSet htf2 = CandleSet.new()
+htf2.settings := SettingsHTF2
+htf2.candles := candles_2
+htf2.imbalances := imbalances_2
+
+var CandleSet htf3 = CandleSet.new()
+htf3.settings := SettingsHTF3
+htf3.candles := candles_3
+htf3.imbalances := imbalances_3
+
+f_tfMap(string s) =>
+    switch s
+        '15m' => '15'
+        '30m' => '30'
+        '1H'  => '60'
+        '90m' => '90'
+        '4H'  => '240'
+        '6H'  => '360'
+        '7H'  => '420'
+        '1D'  => 'D'
+        '1W'  => 'W'
+        =>       '60'
+
+string htf_1 = f_tfMap(htfTf1)
+string htf_2 = f_tfMap(htfTf2)
+string htf_3 = f_tfMap(htfTf3)
+
+// true when a timeframe (in seconds) is currently shown in one of the three HTF candle panels
+isPanelTf(int secs) =>
+    (htfOn1 and timeframe.in_seconds(htf_1) == secs) or (htfOn2 and timeframe.in_seconds(htf_2) == secs) or (htfOn3 and timeframe.in_seconds(htf_3) == secs)
+htf1.settings.show := htfOn1
+htf2.settings.show := htfOn2
+htf3.settings.show := htfOn3
+
+// HTF look
+settings.bull_body     := in_bullBody
+settings.bear_body     := in_bearBody
+settings.bull_border   := in_bullBorder
+settings.bear_border   := in_bearBorder
+settings.bull_wick     := in_bullWick
+settings.bear_wick     := in_bearWick
+settings.psp_up_body   := in_pspUp
+settings.psp_down_body := in_pspDown
+settings.offset        := in_offset
+settings.width         := in_width * 2
+settings.buffer        := in_buffer
+settings.htf_buffer    := in_htfBuffer
+settings.htf_label_color := in_lblColor
+settings.htf_label_size  := in_lblSize
+settings.htf_timer_color := in_tmrColor
+settings.htf_timer_size  := in_tmrSize
+settings.fvg_color     := in_htfFvgCol
+settings.vi_color      := in_htfViCol
+settings.sweep_color   := in_sweepCol
+settings.sep_color     := in_htfSepCol
+settings.htf_label_show  := in_htfLblOn
+settings.htf_timer_show  := in_tmrOn
+settings.label_position  := in_lblPos
+settings.label_alignment := in_lblAlign
+settings.sweep_show      := in_sweepOn
+settings.fvg_show        := in_htfFvgOn
+settings.vi_show         := in_htfViOn
+settings.show_sep        := in_sepShow
+settings.smt_label_show  := smt_label_show
+
+settings.smt_show := true
+settings.smt_show_sym1 := true
+settings.smt_show_sym2 := true
+settings.smt_show_sym3 := true
+settings.sep_style := "Dotted"
+settings.sep_width := 1
+
+settings.enableSMT    := smtEnable
+settings.showHTFSMT   := smtHTFLines
+settings.showChartSMT := smtChartLines
+settings.psp_show     := pspShow
+
+settings.psp_sym1_use := in_use1
+settings.psp_sym1 := in_sym1
+settings.psp_sym2_use := in_use2
+settings.psp_sym2 := in_sym2
+settings.psp_sym3_use := in_use3
+settings.psp_sym3 := in_sym3
+settings.psp_sym4_use := in_use4
+settings.psp_sym4 := in_sym4
+
+color color_transparent = #ffffff00
+var array<line> separators = array.new_line(0)
+var array<line> chartSmtLines = array.new_line()
+var array<label> chartSmtLabels = array.new_label()
+// SMT / SSMT line + label registries (declared up here so the shared label placer can see all of them)
+var array<line>  smtLines   = array.new_line()
+var array<label> smtLabels  = array.new_label()
+var array<line>  ssmtLines  = array.new_line()
+var array<label> ssmtLabels = array.new_label()
+
+// UTILITY FUNCTIONS
+LineStyle(string style) =>
+    switch style
+        'Dashed' => line.style_dashed
+        'Dotted' => line.style_dotted
+        => line.style_solid
+
+// ── Shared SMT label placer ─────────────────────────────────────────────
+// Finds the first free "slot" (0 = on the line, 1..N = pushed further away)
+// so labels from swing SMT / SSMT / HTF chart SMT never sit on top of each other.
+f_smtStackY(int x, float y, bool bear) =>
+    float stp = math.max(nz(cisd_atr, syminfo.mintick * 10), syminfo.mintick * 2) * smtLblGapAtr
+    int slot = 0
+    if smtLblDeclutter
+        slot := -1
+        for s = 0 to smtLblMaxStack
+            float cand = bear ? y + stp * s : y - stp * s
+            bool clash = false
+            for a = 0 to 2
+                array<label> arr = a == 0 ? chartSmtLabels : a == 1 ? smtLabels : ssmtLabels
+                int n = array.size(arr)
+                if n > 0 and not clash
+                    for i = 0 to n - 1
+                        label l = array.get(arr, i)
+                        if not na(l)
+                            if math.abs(label.get_x(l) - x) <= smtLblXRange and math.abs(label.get_y(l) - cand) < stp * 0.9
+                                clash := true
+                                break
+            if not clash
+                slot := s
+                break
+    [slot, stp]
+
+// Draws one SMT marking: thin line + small label centred on the line.
+// Bearish text sits ABOVE the line, bullish text BELOW the line.
+// Label: "[TF]\n[TICKERS]" (or "[TF] SMT" when tickers are off). Hover for full detail.
+f_smtMark(int x1, float y1, int x2, float y2, bool bear, string tfTxt, string kind, string names, color lc, string styleStr, int w, color tc, bool showNames) =>
+    line ln = line.new(x1, y1, x2, y2, xloc = xloc.bar_index, color = lc, style = LineStyle(styleStr), width = w)
+    int mx = int(math.round((x1 + x2) / 2))
+    float my = (y1 + y2) / 2
+    [slot, stp] = f_smtStackY(mx, my, bear)
+    label lb = na
+    if slot >= 0
+        float ly = bear ? my + stp * slot : my - stp * slot
+        string nm = str.trim(names)
+        string body = showNames and nm != "" ? (smtLblTwoLine ? tfTxt + "\n" + nm : tfTxt + " " + nm) : tfTxt + " " + kind
+        string tip = tfTxt + " " + kind + (bear ? " Bear" : " Bull") + (nm != "" ? " · " + nm : "")
+        lb := label.new(mx, ly, body, xloc = xloc.bar_index, yloc = yloc.price, style = bear ? label.style_label_down : label.style_label_up, color = color_transparent, textcolor = tc, size = smtLblSize, tooltip = tip)
+    [ln, lb]
+
+ValidTimeframe(string HTF) =>
+    int chartSeconds = timeframe.in_seconds(timeframe.period)
+    int htfSeconds = timeframe.in_seconds(HTF)
+    not na(chartSeconds) and not na(htfSeconds) and htfSeconds > chartSeconds
+
+RemainingTime(string HTF) =>
+    if barstate.isrealtime
+        timeRemaining = (time_close(HTF) - timenow) / 1000
+        days = math.floor(timeRemaining / 86400)
+        hours = math.floor((timeRemaining - days * 86400) / 3600)
+        minutes = math.floor((timeRemaining - days * 86400 - hours * 3600) / 60)
+        seconds = math.floor(timeRemaining - days * 86400 - hours * 3600 - minutes * 60)
+        r = str.tostring(seconds, '00')
+        if minutes > 0 or hours > 0 or days > 0
+            r := str.tostring(minutes, '00') + ':' + r
+        if hours > 0 or days > 0
+            r := str.tostring(hours, '00') + ':' + r
+        if days > 0
+            r := str.tostring(days) + 'D ' + r
+        r
+    else
+        'n/a'
+
+// Timeframe name: 15m, 30m, 1H, 90m (not "1.5H"), 4H, 6H, 7H, 1D, 1W
+HTFName(string HTF) =>
+    int seconds = timeframe.in_seconds(HTF)
+    int mins = int(seconds / 60)
+    string r = HTF
+    if seconds < 60
+        r := str.tostring(seconds) + 's'
+    else if mins < 60
+        r := str.tostring(mins) + 'm'
+    else if seconds < 86400
+        r := mins % 60 == 0 ? str.tostring(int(mins / 60)) + 'H' : str.tostring(mins) + 'm'
+    else if seconds == 86400
+        r := '1D'
+    else if seconds == 604800
+        r := '1W'
+    r
+
+ShortTicker(string symbol) =>
+    string t = syminfo.ticker(symbol)
+    string upper = str.upper(t)
+    str.contains(upper, 'MNQ') ? 'NQ' : str.contains(upper, 'MES') ? 'ES' : str.contains(upper, 'MYM') ? 'YM' : str.contains(upper, 'NQ') ? 'NQ' : str.contains(upper, 'ES') ? 'ES' : str.contains(upper, 'YM') ? 'YM' : t
+
+SameInstrument(string symbol) =>
+    string chartRoot = ShortTicker(syminfo.tickerid)
+    string refRoot = ShortTicker(symbol)
+    chartRoot == refRoot
+
+PSPColor(bool bull, int candleTime, float c1, float o1, int t1, float c2, float o2, int t2, float c3, float o3, int t3, float c4, float o4, int t4) =>
+    bool diverge1 = settings.psp_sym1_use and not na(c1) and not na(o1) and t1 == candleTime and (bull != (c1 > o1))
+    bool diverge2 = settings.psp_sym2_use and not na(c2) and not na(o2) and t2 == candleTime and (bull != (c2 > o2))
+    bool diverge3 = settings.psp_sym3_use and not na(c3) and not na(o3) and t3 == candleTime and (bull != (c3 > o3))
+    bool diverge4 = settings.psp_sym4_use and not na(c4) and not na(o4) and t4 == candleTime and (bull != (c4 > o4))
+    bool isPSP = settings.psp_show and (diverge1 or diverge2 or diverge3 or diverge4)
+    color bodyCol = bull ? settings.psp_up_body : settings.psp_down_body
+    [isPSP, bodyCol]
+
+// SMT timeframe enable: all nine user-selected timeframes.
+getSMTEnabled(string tf) =>
+    int s = timeframe.in_seconds(tf)
+    switch s
+        900     => smt_en_15m
+        1800    => smt_en_30m
+        3600    => smt_en_1h
+        5400    => smt_en_90m
+        14400   => smt_en_4h
+        21600   => smt_en_6h
+        25200   => smt_en_7h
+        86400   => smt_en_1d
+        604800  => smt_en_1w
+        => false
+
+// Methods
+method HTFEnabled(CandleSet htf1, CandleSet htf2, CandleSet htf3) =>
+    (htf1.settings.show ? 1 : 0) + (htf2.settings.show ? 1 : 0) + (htf3.settings.show ? 1 : 0)
+
+method CandleSetHigh(array<Candle> candles, float h) =>
+    _h = h
+    if array.size(candles) > 0
+        for i = 0 to array.size(candles) - 1
+            Candle c = array.get(candles, i)
+            if c.h > _h
+                _h := c.h
+    _h
+
+method CandleSetLow(array<Candle> candles, float l) =>
+    _l = l
+    if array.size(candles) > 0
+        for i = 0 to array.size(candles) - 1
+            Candle c = array.get(candles, i)
+            if c.l < _l
+                _l := c.l
+    _l
+
+method CandlesHigh(CandleSet htf1, CandleSet htf2, CandleSet htf3, array<Candle> candles) =>
+    h = 0.0
+    int cnt = 0
+    int last = htf1.HTFEnabled(htf2, htf3)
+    if htf1.settings.show and ValidTimeframe(htf1.settings.htf)
+        h := htf1.candles.CandleSetHigh(h)
+        cnt += 1
+    if htf2.settings.show and ValidTimeframe(htf2.settings.htf) and cnt < last
+        h := htf2.candles.CandleSetHigh(h)
+        cnt += 1
+    if htf3.settings.show and ValidTimeframe(htf3.settings.htf) and cnt < last
+        h := htf3.candles.CandleSetHigh(h)
+    if array.size(candles) > 0
+        for i = 0 to array.size(candles) - 1
+            Candle c = array.get(candles, i)
+            if c.h > h
+                h := c.h
+    h
+
+method CandlesLow(CandleSet htf1, CandleSet htf2, CandleSet htf3, array<Candle> candles, float h) =>
+    l = h
+    int cnt = 0
+    int last = htf1.HTFEnabled(htf2, htf3)
+    if htf1.settings.show and ValidTimeframe(htf1.settings.htf)
+        l := htf1.candles.CandleSetLow(l)
+        cnt += 1
+    if htf2.settings.show and ValidTimeframe(htf2.settings.htf) and cnt < last
+        l := htf2.candles.CandleSetLow(l)
+        cnt += 1
+    if htf3.settings.show and ValidTimeframe(htf3.settings.htf) and cnt < last
+        l := htf3.candles.CandleSetLow(l)
+    if array.size(candles) > 0
+        for i = 0 to array.size(candles) - 1
+            Candle c = array.get(candles, i)
+            if c.l < l
+                l := c.l
+    l
+
+method UpdateTime(CandleSet candleSet, int offset) =>
+    if settings.htf_timer_show and (barstate.isrealtime or barstate.islast)
+        string tmr = '(' + RemainingTime(candleSet.settings.htf) + ')'
+        if not na(candleSet.tfTimerTop)
+            candleSet.tfTimerTop.set_text(tmr)
+        if not na(candleSet.tfTimerBottom)
+            candleSet.tfTimerBottom.set_text(tmr)
+    candleSet
+
+method Reorder(CandleSet candleSet, int offset) =>
+    size = candleSet.candles.size()
+    if size > 0
+        for i = size - 1 to 0 by 1
+            Candle candle = candleSet.candles.get(i)
+            t_buffer = offset + (settings.width + settings.buffer) * (size - i - 1)
+            box.set_left(candle.body, bar_index + t_buffer)
+            box.set_right(candle.body, bar_index + settings.width + t_buffer)
+            line.set_x1(candle.wick_up, bar_index + settings.width / 2 + t_buffer)
+            line.set_x2(candle.wick_up, bar_index + settings.width / 2 + t_buffer)
+            line.set_x1(candle.wick_down, bar_index + settings.width / 2 + t_buffer)
+            line.set_x2(candle.wick_down, bar_index + settings.width / 2 + t_buffer)
+    top = 0.0
+    bottom = 0.0
+    if settings.label_alignment == 'Align'
+        top := htf1.CandlesHigh(htf2, htf3, candleSet.candles)
+        bottom := htf1.CandlesLow(htf2, htf3, candleSet.candles, top)
+    if settings.label_alignment == 'Follow Candles'
+        top := candleSet.candles.CandleSetHigh(0)
+        bottom := candleSet.candles.CandleSetLow(top)
+    left = bar_index + offset + (settings.width + settings.buffer) * (size - 1) / 2
+    if settings.htf_label_show
+        string lblt = HTFName(candleSet.settings.htf)
+        string lbll = lblt
+        if settings.htf_timer_show
+            lblt := lblt + '\n'
+            lbll := '\n' + lbll
+        string tmr = '(' + RemainingTime(candleSet.settings.htf) + ')'
+        if settings.label_position == 'Both' or settings.label_position == 'Top'
+            if not na(candleSet.tfNameTop)
+                candleSet.tfNameTop.set_xy(left, top)
+            else
+                candleSet.tfNameTop := label.new(left, top, lblt, color = color_transparent, textcolor = settings.htf_label_color, style = label.style_label_down, size = settings.htf_label_size)
+            if settings.htf_timer_show
+                if not na(candleSet.tfTimerTop)
+                    candleSet.tfTimerTop.set_xy(left, top)
+                else
+                    candleSet.tfTimerTop := label.new(left, top, tmr, color = color_transparent, textcolor = settings.htf_timer_color, style = label.style_label_down, size = settings.htf_timer_size)
+        if settings.label_position == 'Both' or settings.label_position == 'Bottom'
+            if not na(candleSet.tfNameBottom)
+                candleSet.tfNameBottom.set_xy(left, bottom)
+            else
+                candleSet.tfNameBottom := label.new(left, bottom, lbll, color = color_transparent, textcolor = settings.htf_label_color, style = label.style_label_up, size = settings.htf_label_size)
+            if settings.htf_timer_show
+                if not na(candleSet.tfTimerBottom)
+                    candleSet.tfTimerBottom.set_xy(left, bottom)
+                else
+                    candleSet.tfTimerBottom := label.new(left, bottom, tmr, color = color_transparent, textcolor = settings.htf_timer_color, style = label.style_label_up, size = settings.htf_timer_size)
+    candleSet
+
+method FindImbalance(CandleSet candleSet) =>
+    if barstate.isrealtime or barstate.islast
+        if candleSet.imbalances.size() > 0
+            for i = candleSet.imbalances.size() - 1 to 0 by 1
+                Imbalance del = candleSet.imbalances.get(i)
+                box.delete(del.b)
+                candleSet.imbalances.pop()
+        if candleSet.candles.size() > 3 and settings.fvg_show
+            for i = 0 to candleSet.candles.size() - 3 by 1
+                candle1 = candleSet.candles.get(i)
+                candle2 = candleSet.candles.get(i + 2)
+                candle3 = candleSet.candles.get(i + 1)
+                if candle1.l > candle2.h and math.min(candle1.o, candle1.c) > math.max(candle2.o, candle2.c)
+                    Imbalance imb = Imbalance.new()
+                    imb.b := box.new(box.get_left(candle2.body), candle2.h, box.get_right(candle1.body), candle1.l, bgcolor = settings.fvg_color, border_color = color_transparent, xloc = xloc.bar_index)
+                    candleSet.imbalances.push(imb)
+                if candle1.h < candle2.l and math.max(candle1.o, candle1.c) < math.min(candle2.o, candle2.c)
+                    Imbalance imb = Imbalance.new()
+                    imb.b := box.new(box.get_right(candle1.body), candle1.h, box.get_left(candle2.body), candle2.l, bgcolor = settings.fvg_color, border_color = color_transparent)
+                    candleSet.imbalances.push(imb)
+                box temp = box.copy(candle3.body)
+                box.delete(candle3.body)
+                candle3.body := temp
+        if candleSet.candles.size() > 2 and settings.vi_show
+            for i = 0 to candleSet.candles.size() - 2 by 1
+                candle1 = candleSet.candles.get(i)
+                candle2 = candleSet.candles.get(i + 1)
+                if candle1.l < candle2.h and math.min(candle1.o, candle1.c) > math.max(candle2.o, candle2.c)
+                    Imbalance imb = Imbalance.new()
+                    imb.b := box.new(box.get_left(candle2.body), math.min(candle1.o, candle1.c), box.get_right(candle1.body), math.max(candle2.o, candle2.c), bgcolor = settings.vi_color, border_color = color_transparent)
+                    candleSet.imbalances.push(imb)
+                if candle1.h > candle2.l and math.max(candle1.o, candle1.c) < math.min(candle2.o, candle2.c)
+                    Imbalance imb = Imbalance.new()
+                    imb.b := box.new(box.get_right(candle1.body), math.min(candle2.o, candle2.c), box.get_left(candle2.body), math.max(candle1.o, candle1.c), bgcolor = settings.vi_color, border_color = color_transparent)
+                    candleSet.imbalances.push(imb)
+    candleSet
+
+// Exact peak finder: scans the real chart bars that belong to ONE HTF candle.
+f_exactPeak(int startIdx, int endIdx, bool wantHigh, int fbIdx, float fbPx) =>
+    int bestIdx = fbIdx
+    float bestPx = fbPx
+    int s = math.max(startIdx, bar_index - 4900)
+    int e = math.min(endIdx, bar_index)
+    if s <= e
+        float ext = wantHigh ? -1e18 : 1e18
+        for i = s to e
+            float px = wantHigh ? high[bar_index - i] : low[bar_index - i]
+            bool better = wantHigh ? px > ext : px < ext
+            if better
+                ext := px
+                bestIdx := i
+                bestPx := px
+    [bestIdx, bestPx]
+
+// HTF-panel sweeps + SMT, plus compact chart SMT labels for enabled HTF slots.
+// Chart SMT text is written at the middle of the line:
+//   BEARISH = above the line, BULLISH = below the line.
+method DrawSweepAndSMT(CandleSet candleSet) =>
+    if (barstate.isrealtime or barstate.islast) and candleSet.candles.size() >= 2
+        color sweepColor = settings.sweep_color
+        int htfSecsX = timeframe.in_seconds(candleSet.settings.htf)
+        string tfNameTxt = HTFName(candleSet.settings.htf)
+        // Same switches as section 8: SMT switch for the TF, or SSMT switch (90m and above).
+        bool ssOnTf = ssmtOn and htfSecsX >= 5400 and (htfSecsX == 5400 ? ssmt_en_90m : htfSecsX == 14400 ? ssmt_en_4h : htfSecsX == 21600 ? ssmt_en_6h : htfSecsX == 25200 ? ssmt_en_7h : htfSecsX == 86400 ? ssmt_en_1d : htfSecsX == 604800 ? ssmt_en_1w : false)
+        bool smtOnTf = smtEnable and getSMTEnabled(candleSet.settings.htf)
+        bool chartOk = settings.showChartSMT and (smtOnTf or ssOnTf)
+        string chartKind = ssOnTf ? "SSMT" : "SMT"
+        string chartStyle = ssOnTf ? ssmt_line_style : div_line_style
+        int chartW = ssOnTf ? ssmt_line_width : div_line_width
+        color chartTxt = ssOnTf ? ssmt_text_col : smt_text_col
+        bool chartNames = ssOnTf ? ssmt_label_show : settings.smt_label_show
+        color chartBear = ssOnTf ? ssmtBearCol : smtBearCol
+        color chartBull = ssOnTf ? ssmtBullCol : smtBullCol
+        int sz = candleSet.candles.size()
+        for i = 0 to sz - 2
+            Candle B = candleSet.candles.get(i)
+            Candle A = candleSet.candles.get(i + 1)
+            int A_l = box.get_left(A.body)
+            int A_cx = A_l + settings.width / 2
+            int B_l = box.get_left(B.body)
+            int B_cx = B_l + settings.width / 2
+            int B_r = box.get_right(B.body)
+            if not na(B.sweep_high_line)
+                line.delete(B.sweep_high_line)
+                B.sweep_high_line := na
+            if not na(B.sweep_low_line)
+                line.delete(B.sweep_low_line)
+                B.sweep_low_line := na
+            if not na(B.smt_high_line)
+                line.delete(B.smt_high_line)
+                B.smt_high_line := na
+            if not na(B.smt_low_line)
+                line.delete(B.smt_low_line)
+                B.smt_low_line := na
+            if not na(B.smt_label)
+                label.delete(B.smt_label)
+                B.smt_label := na
+            bool hasSMT = false
+            if settings.smt_show and settings.enableSMT
+                bool chartHH = B.h > A.h
+                bool chartLL = B.l < A.l
+                string divLabelsUp = ""
+                string divLabelsDown = ""
+                if A.smt_use1 and B.smt_use1 and A.smt_valid1 and B.smt_valid1 and not na(A.smt_h1) and not na(B.smt_h1) and not na(A.smt_l1) and not na(B.smt_l1)
+                    bool sym1HH = B.smt_h1 > A.smt_h1
+                    bool sym1LL = B.smt_l1 < A.smt_l1
+                    if chartHH != sym1HH
+                        divLabelsUp := settings.smt_show_sym1 ? ShortTicker(settings.psp_sym1) : " "
+                    if chartLL != sym1LL
+                        divLabelsDown := settings.smt_show_sym1 ? ShortTicker(settings.psp_sym1) : " "
+                if A.smt_use2 and B.smt_use2 and A.smt_valid2 and B.smt_valid2 and not na(A.smt_h2) and not na(B.smt_h2) and not na(A.smt_l2) and not na(B.smt_l2)
+                    bool sym2HH = B.smt_h2 > A.smt_h2
+                    bool sym2LL = B.smt_l2 < A.smt_l2
+                    if chartHH != sym2HH
+                        divLabelsUp := divLabelsUp == "" ? (settings.smt_show_sym2 ? ShortTicker(settings.psp_sym2) : " ") : divLabelsUp + (settings.smt_show_sym2 ? " " + ShortTicker(settings.psp_sym2) : "")
+                    if chartLL != sym2LL
+                        divLabelsDown := divLabelsDown == "" ? (settings.smt_show_sym2 ? ShortTicker(settings.psp_sym2) : " ") : divLabelsDown + (settings.smt_show_sym2 ? " " + ShortTicker(settings.psp_sym2) : "")
+                if A.smt_use3 and B.smt_use3 and A.smt_valid3 and B.smt_valid3 and not na(A.smt_h3) and not na(B.smt_h3) and not na(A.smt_l3) and not na(B.smt_l3)
+                    bool sym3HH = B.smt_h3 > A.smt_h3
+                    bool sym3LL = B.smt_l3 < A.smt_l3
+                    if chartHH != sym3HH
+                        divLabelsUp := divLabelsUp == "" ? (settings.smt_show_sym3 ? ShortTicker(settings.psp_sym3) : " ") : divLabelsUp + (settings.smt_show_sym3 ? " " + ShortTicker(settings.psp_sym3) : "")
+                    if chartLL != sym3LL
+                        divLabelsDown := divLabelsDown == "" ? (settings.smt_show_sym3 ? ShortTicker(settings.psp_sym3) : " ") : divLabelsDown + (settings.smt_show_sym3 ? " " + ShortTicker(settings.psp_sym3) : "")
+                if A.smt_use4 and B.smt_use4 and A.smt_valid4 and B.smt_valid4 and not na(A.smt_h4) and not na(B.smt_h4) and not na(A.smt_l4) and not na(B.smt_l4)
+                    bool sym4HH = B.smt_h4 > A.smt_h4
+                    bool sym4LL = B.smt_l4 < A.smt_l4
+                    if chartHH != sym4HH
+                        divLabelsUp := divLabelsUp == "" ? ShortTicker(settings.psp_sym4) : divLabelsUp + " " + ShortTicker(settings.psp_sym4)
+                    if chartLL != sym4LL
+                        divLabelsDown := divLabelsDown == "" ? ShortTicker(settings.psp_sym4) : divLabelsDown + " " + ShortTicker(settings.psp_sym4)
+
+                bool bearishSMT = divLabelsUp != ""
+                bool bullishSMT = divLabelsDown != ""
+
+                // Chart-bar ranges that belong to candle A and candle B
+                int aEnd = B.bar_idx - 1
+                int bEnd = i == 0 ? bar_index : candleSet.candles.get(i - 1).bar_idx - 1
+
+                if bearishSMT
+                    hasSMT := true
+                    if settings.showHTFSMT
+                        B.smt_high_line := line.new(A_cx, A.h, B_cx, B.h, xloc=xloc.bar_index, color=cleanSMTColor, width=div_line_width, style=LineStyle(div_line_style))
+                    if chartOk
+                        [aHiIdx, aHiPx] = f_exactPeak(A.bar_idx, aEnd, true, A.high_bar_idx, A.h)
+                        [bHiIdx, bHiPx] = f_exactPeak(B.bar_idx, bEnd, true, B.high_bar_idx, B.h)
+                        [mkLn, mkLb] = f_smtMark(aHiIdx, aHiPx, bHiIdx, bHiPx, true, tfNameTxt, chartKind, divLabelsUp, chartBear, chartStyle, chartW, chartTxt, chartNames)
+                        array.push(chartSmtLines, mkLn)
+                        array.push(chartSmtLabels, mkLb)
+
+                if bullishSMT
+                    hasSMT := true
+                    if settings.showHTFSMT
+                        B.smt_low_line := line.new(A_cx, A.l, B_cx, B.l, xloc=xloc.bar_index, color=cleanSMTColor, width=div_line_width, style=LineStyle(div_line_style))
+                    if chartOk
+                        [aLoIdx, aLoPx] = f_exactPeak(A.bar_idx, aEnd, false, A.low_bar_idx, A.l)
+                        [bLoIdx, bLoPx] = f_exactPeak(B.bar_idx, bEnd, false, B.low_bar_idx, B.l)
+                        [mkLnL, mkLbL] = f_smtMark(aLoIdx, aLoPx, bLoIdx, bLoPx, false, tfNameTxt, chartKind, divLabelsDown, chartBull, chartStyle, chartW, chartTxt, chartNames)
+                        array.push(chartSmtLines, mkLnL)
+                        array.push(chartSmtLabels, mkLbL)
+
+            if settings.sweep_show and not hasSMT
+                if B.h > A.h
+                    B.sweep_high_line := line.new(A_cx, A.h, B_r, A.h, xloc = xloc.bar_index, color = sweepColor, width = 1, style = line.style_solid)
+                if B.l < A.l
+                    B.sweep_low_line := line.new(A_cx, A.l, B_r, A.l, xloc = xloc.bar_index, color = sweepColor, width = 1, style = line.style_solid)
+        Candle oldest = candleSet.candles.get(sz - 1)
+        if not na(oldest.sweep_high_line)
+            line.delete(oldest.sweep_high_line)
+            oldest.sweep_high_line := na
+        if not na(oldest.sweep_low_line)
+            line.delete(oldest.sweep_low_line)
+            oldest.sweep_low_line := na
+        if not na(oldest.smt_high_line)
+            line.delete(oldest.smt_high_line)
+            oldest.smt_high_line := na
+        if not na(oldest.smt_low_line)
+            line.delete(oldest.smt_low_line)
+            oldest.smt_low_line := na
+        if not na(oldest.smt_label)
+            label.delete(oldest.smt_label)
+            oldest.smt_label := na
+    candleSet
+
+method Monitor(CandleSet candleSet) =>
+    int HTFBarTime = time(candleSet.settings.htf)
+    isNewHTFCandle = ta.change(HTFBarTime) > 0
+    if isNewHTFCandle
+        Candle candle = Candle.new()
+        candle.o := nz(candleSet.settings.own_o, open)
+        candle.c := nz(candleSet.settings.own_c, close)
+        candle.h := nz(candleSet.settings.own_h, high)
+        candle.l := nz(candleSet.settings.own_l, low)
+        candle.o_time := HTFBarTime
+        candle.bar_idx := bar_index
+        
+        candle.high_bar_idx := bar_index
+        candle.low_bar_idx := bar_index
+        
+        bull = candle.c > candle.o
+        [isPSP, pspBody] = PSPColor(bull, HTFBarTime, candleSet.settings.sym1_c, candleSet.settings.sym1_o, candleSet.settings.sym1_t, candleSet.settings.sym2_c, candleSet.settings.sym2_o, candleSet.settings.sym2_t, candleSet.settings.sym3_c, candleSet.settings.sym3_o, candleSet.settings.sym3_t, candleSet.settings.sym4_c, candleSet.settings.sym4_o, candleSet.settings.sym4_t)
+        
+        color bodyColor = isPSP ? pspBody : (bull ? settings.bull_body : settings.bear_body)
+        color borderColor = bull ? settings.bull_border : settings.bear_border
+        color wickColor = bull ? settings.bull_wick : settings.bear_wick
+        
+        candle.body := box.new(bar_index, math.max(candle.o, candle.c), bar_index + 2, math.min(candle.o, candle.c), borderColor, 1, bgcolor = bodyColor)
+        candle.wick_up := line.new(bar_index + 1, candle.h, bar_index, math.max(candle.o, candle.c), color = wickColor)
+        candle.wick_down := line.new(bar_index + 1, math.min(candle.o, candle.c), bar_index, candle.l, color = wickColor)
+        candle.smt_h1 := candleSet.settings.sym1_h
+        candle.smt_l1 := candleSet.settings.sym1_l
+        candle.smt_h2 := candleSet.settings.sym2_h
+        candle.smt_l2 := candleSet.settings.sym2_l
+        candle.smt_h3 := candleSet.settings.sym3_h
+        candle.smt_l3 := candleSet.settings.sym3_l
+        candle.smt_h4 := candleSet.settings.sym4_h
+        candle.smt_l4 := candleSet.settings.sym4_l
+        candle.smt_use1 := settings.psp_sym1_use and not SameInstrument(settings.psp_sym1)
+        candle.smt_use2 := settings.psp_sym2_use and not SameInstrument(settings.psp_sym2)
+        candle.smt_use3 := settings.psp_sym3_use and not SameInstrument(settings.psp_sym3)
+        candle.smt_use4 := settings.psp_sym4_use and not SameInstrument(settings.psp_sym4)
+        candle.smt_valid1 := not na(candleSet.settings.sym1_t) and candleSet.settings.sym1_t == HTFBarTime
+        candle.smt_valid2 := not na(candleSet.settings.sym2_t) and candleSet.settings.sym2_t == HTFBarTime
+        candle.smt_valid3 := not na(candleSet.settings.sym3_t) and candleSet.settings.sym3_t == HTFBarTime
+        candle.smt_valid4 := not na(candleSet.settings.sym4_t) and candleSet.settings.sym4_t == HTFBarTime
+        candleSet.candles.unshift(candle)
+        if candleSet.candles.size() > candleSet.settings.max_display
+            Candle delCandle = array.pop(candleSet.candles)
+            box.delete(delCandle.body)
+            line.delete(delCandle.wick_up)
+            line.delete(delCandle.wick_down)
+    candleSet
+
+method Update(CandleSet candleSet, int offset) =>
+    if candleSet.candles.size() > 0
+        Candle candle = candleSet.candles.first()
+        bool isLiveCandle = candle.o_time == time(candleSet.settings.htf)
+        
+        if isLiveCandle
+            candle.h := nz(candleSet.settings.own_h, math.max(candle.h, high))
+            candle.l := nz(candleSet.settings.own_l, math.min(candle.l, low))
+            candle.c := nz(candleSet.settings.own_c, close)
+            if high >= candle.h - syminfo.mintick / 2
+                candle.high_bar_idx := bar_index
+            if low <= candle.l + syminfo.mintick / 2
+                candle.low_bar_idx := bar_index
+        bull = candle.c > candle.o
+        if isLiveCandle
+            int HTFBarTime = time(candleSet.settings.htf)
+            [isPSP, pspBody] = PSPColor(bull, HTFBarTime, candleSet.settings.sym1_c, candleSet.settings.sym1_o, candleSet.settings.sym1_t, candleSet.settings.sym2_c, candleSet.settings.sym2_o, candleSet.settings.sym2_t, candleSet.settings.sym3_c, candleSet.settings.sym3_o, candleSet.settings.sym3_t, candleSet.settings.sym4_c, candleSet.settings.sym4_o, candleSet.settings.sym4_t)
+            
+            color bodyColor = isPSP ? pspBody : (bull ? settings.bull_body : settings.bear_body)
+            color borderColor = bull ? settings.bull_border : settings.bear_border
+            color wickColor = bull ? settings.bull_wick : settings.bear_wick
+            
+            box.set_bgcolor(candle.body, bodyColor)
+            box.set_border_color(candle.body, borderColor)
+            line.set_color(candle.wick_up, wickColor)
+            line.set_color(candle.wick_down, wickColor)
+            candle.smt_h1 := candleSet.settings.sym1_h
+            candle.smt_l1 := candleSet.settings.sym1_l
+            candle.smt_h2 := candleSet.settings.sym2_h
+            candle.smt_l2 := candleSet.settings.sym2_l
+            candle.smt_h3 := candleSet.settings.sym3_h
+            candle.smt_l3 := candleSet.settings.sym3_l
+            candle.smt_h4 := candleSet.settings.sym4_h
+            candle.smt_l4 := candleSet.settings.sym4_l
+            candle.smt_valid1 := not na(candleSet.settings.sym1_t) and candleSet.settings.sym1_t == HTFBarTime
+            candle.smt_valid2 := not na(candleSet.settings.sym2_t) and candleSet.settings.sym2_t == HTFBarTime
+            candle.smt_valid3 := not na(candleSet.settings.sym3_t) and candleSet.settings.sym3_t == HTFBarTime
+            candle.smt_valid4 := not na(candleSet.settings.sym4_t) and candleSet.settings.sym4_t == HTFBarTime
+            box.set_top(candle.body, candle.o)
+            box.set_bottom(candle.body, candle.c)
+            line.set_y1(candle.wick_up, candle.h)
+            line.set_y2(candle.wick_up, math.max(candle.o, candle.c))
+            line.set_y1(candle.wick_down, candle.l)
+            line.set_y2(candle.wick_down, math.min(candle.o, candle.c))
+        if barstate.isrealtime or barstate.islast
+            candleSet.Reorder(offset)
+    candleSet
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUTO CORRELATED PAIRS (follows the chart asset)
+// ═══════════════════════════════════════════════════════════════════════════
+
+f_addPool(array<string> keys, array<string> syms, string k, string s) =>
+    array.push(keys, k)
+    array.push(syms, s)
+
+f_autoPairs() =>
+    string r = syminfo.root
+    string p = syminfo.prefix
+    string selfKey = r == "MNQ" ? "NQ" : r == "MES" ? "ES" : r == "MYM" ? "YM" : r == "M2K" ? "RTY" : r == "MGC" ? "GC" : r
+    array<string> keys = array.new_string()
+    array<string> syms = array.new_string()
+
+    bool isIdx = selfKey == "NQ" or selfKey == "ES" or selfKey == "YM" or selfKey == "RTY"
+    bool isSpotMetal = str.startswith(r, "XAU") or str.startswith(r, "XAG")
+    bool isFutMetal = selfKey == "GC" or selfKey == "SI" or selfKey == "PL"
+    bool isFx = r == "EURUSD" or r == "GBPUSD" or r == "AUDUSD" or r == "NZDUSD"
+    bool isCrypto = syminfo.type == "crypto"
+
+    if isIdx
+        f_addPool(keys, syms, "NQ", "CME_MINI:NQ1!")
+        f_addPool(keys, syms, "ES", "CME_MINI:ES1!")
+        f_addPool(keys, syms, "YM", "CBOT_MINI:YM1!")
+        f_addPool(keys, syms, "RTY", "CME_MINI:RTY1!")
+    else if isSpotMetal
+        f_addPool(keys, syms, "XAUUSD", p + ":XAUUSD")
+        f_addPool(keys, syms, "XAGUSD", p + ":XAGUSD")
+        f_addPool(keys, syms, "XAUEUR", p + ":XAUEUR")
+        f_addPool(keys, syms, "XAUGBP", p + ":XAUGBP")
+    else if isFutMetal
+        f_addPool(keys, syms, "GC", "COMEX:GC1!")
+        f_addPool(keys, syms, "SI", "COMEX:SI1!")
+        f_addPool(keys, syms, "PL", "NYMEX:PL1!")
+    else if isFx
+        f_addPool(keys, syms, "EURUSD", p + ":EURUSD")
+        f_addPool(keys, syms, "GBPUSD", p + ":GBPUSD")
+        f_addPool(keys, syms, "AUDUSD", p + ":AUDUSD")
+        f_addPool(keys, syms, "NZDUSD", p + ":NZDUSD")
+    else if isCrypto
+        selfKey := syminfo.basecurrency
+        f_addPool(keys, syms, "BTC", p + ":BTC" + syminfo.currency)
+        f_addPool(keys, syms, "ETH", p + ":ETH" + syminfo.currency)
+        f_addPool(keys, syms, "SOL", p + ":SOL" + syminfo.currency)
+        f_addPool(keys, syms, "XRP", p + ":XRP" + syminfo.currency)
+
+    array<string> out = array.new_string()
+    if array.size(keys) > 0
+        for i = 0 to array.size(keys) - 1
+            if array.get(keys, i) != selfKey and array.size(out) < 4
+                array.push(out, array.get(syms, i))
+    int n = array.size(out)
+    while array.size(out) < 4
+        array.push(out, syminfo.tickerid)
+    [array.get(out, 0), array.get(out, 1), array.get(out, 2), array.get(out, 3), n]
+
+[apS1, apS2, apS3, apS4, apN] = f_autoPairs()
+
+if autoPairs and apN > 0
+    settings.psp_sym1 := apS1
+    settings.psp_sym2 := apS2
+    settings.psp_sym3 := apS3
+    settings.psp_sym4 := apS4
+    settings.psp_sym1_use := settings.psp_sym1_use and apN >= 1
+    settings.psp_sym2_use := settings.psp_sym2_use and apN >= 2
+    settings.psp_sym3_use := settings.psp_sym3_use and apN >= 3
+    settings.psp_sym4_use := settings.psp_sym4_use and apN >= 4
+
+settings.psp_sym1_use := settings.psp_sym1_use and not SameInstrument(settings.psp_sym1)
+settings.psp_sym2_use := settings.psp_sym2_use and not SameInstrument(settings.psp_sym2)
+settings.psp_sym3_use := settings.psp_sym3_use and not SameInstrument(settings.psp_sym3)
+settings.psp_sym4_use := settings.psp_sym4_use and not SameInstrument(settings.psp_sym4)
+
+htf1.settings.htf := htf_1
+htf2.settings.htf := htf_2
+htf3.settings.htf := htf_3
+htf1.settings.max_display := htfCnt1
+htf2.settings.max_display := htfCnt2
+htf3.settings.max_display := htfCnt3
+
+string effectiveHtf1 = timeframe.in_seconds(htf1.settings.htf) > timeframe.in_seconds() ? htf1.settings.htf : timeframe.period
+[sym1_o_1, sym1_c_1, sym1_h_1, sym1_l_1, sym1_t_1] = request.security(settings.psp_sym1, effectiveHtf1, [open, close, high, low, time], lookahead = barmerge.lookahead_on)
+[sym2_o_1, sym2_c_1, sym2_h_1, sym2_l_1, sym2_t_1] = request.security(settings.psp_sym2, effectiveHtf1, [open, close, high, low, time], lookahead = barmerge.lookahead_on)
+[sym3_o_1, sym3_c_1, sym3_h_1, sym3_l_1, sym3_t_1] = request.security(settings.psp_sym3, effectiveHtf1, [open, close, high, low, time], lookahead = barmerge.lookahead_on)
+[sym4_o_1, sym4_c_1, sym4_h_1, sym4_l_1, sym4_t_1] = request.security(settings.psp_sym4, effectiveHtf1, [open, close, high, low, time], lookahead = barmerge.lookahead_on)
+htf1.settings.sym1_o := sym1_o_1
+htf1.settings.sym1_c := sym1_c_1
+htf1.settings.sym1_h := sym1_h_1
+htf1.settings.sym1_l := sym1_l_1
+htf1.settings.sym1_t := sym1_t_1
+htf1.settings.sym2_o := sym2_o_1
+htf1.settings.sym2_c := sym2_c_1
+htf1.settings.sym2_h := sym2_h_1
+htf1.settings.sym2_l := sym2_l_1
+htf1.settings.sym2_t := sym2_t_1
+htf1.settings.sym3_o := sym3_o_1
+htf1.settings.sym3_c := sym3_c_1
+htf1.settings.sym3_h := sym3_h_1
+htf1.settings.sym3_l := sym3_l_1
+htf1.settings.sym3_t := sym3_t_1
+htf1.settings.sym4_o := sym4_o_1
+htf1.settings.sym4_c := sym4_c_1
+htf1.settings.sym4_h := sym4_h_1
+htf1.settings.sym4_l := sym4_l_1
+htf1.settings.sym4_t := sym4_t_1
+[own_o_1, own_h_1, own_l_1, own_c_1] = request.security(syminfo.tickerid, effectiveHtf1, [open, high, low, close], lookahead = barmerge.lookahead_on)
+htf1.settings.own_o := own_o_1
+htf1.settings.own_h := own_h_1
+htf1.settings.own_l := own_l_1
+htf1.settings.own_c := own_c_1
+
+string effectiveHtf2 = timeframe.in_seconds(htf2.settings.htf) > timeframe.in_seconds() ? htf2.settings.htf : timeframe.period
+[sym1_o_2, sym1_c_2, sym1_h_2, sym1_l_2, sym1_t_2] = request.security(settings.psp_sym1, effectiveHtf2, [open, close, high, low, time], lookahead = barmerge.lookahead_off)
+[sym2_o_2, sym2_c_2, sym2_h_2, sym2_l_2, sym2_t_2] = request.security(settings.psp_sym2, effectiveHtf2, [open, close, high, low, time], lookahead = barmerge.lookahead_off)
+[sym3_o_2, sym3_c_2, sym3_h_2, sym3_l_2, sym3_t_2] = request.security(settings.psp_sym3, effectiveHtf2, [open, close, high, low, time], lookahead = barmerge.lookahead_off)
+[sym4_o_2, sym4_c_2, sym4_h_2, sym4_l_2, sym4_t_2] = request.security(settings.psp_sym4, effectiveHtf2, [open, close, high, low, time], lookahead = barmerge.lookahead_off)
+htf2.settings.sym1_o := sym1_o_2
+htf2.settings.sym1_c := sym1_c_2
+htf2.settings.sym1_h := sym1_h_2
+htf2.settings.sym1_l := sym1_l_2
+htf2.settings.sym1_t := sym1_t_2
+htf2.settings.sym2_o := sym2_o_2
+htf2.settings.sym2_c := sym2_c_2
+htf2.settings.sym2_h := sym2_h_2
+htf2.settings.sym2_l := sym2_l_2
+htf2.settings.sym2_t := sym2_t_2
+htf2.settings.sym3_o := sym3_o_2
+htf2.settings.sym3_c := sym3_c_2
+htf2.settings.sym3_h := sym3_h_2
+htf2.settings.sym3_l := sym3_l_2
+htf2.settings.sym3_t := sym3_t_2
+htf2.settings.sym4_o := sym4_o_2
+htf2.settings.sym4_c := sym4_c_2
+htf2.settings.sym4_h := sym4_h_2
+htf2.settings.sym4_l := sym4_l_2
+htf2.settings.sym4_t := sym4_t_2
+[own_o_2, own_h_2, own_l_2, own_c_2] = request.security(syminfo.tickerid, effectiveHtf2, [open, high, low, close], lookahead = barmerge.lookahead_on)
+htf2.settings.own_o := own_o_2
+htf2.settings.own_h := own_h_2
+htf2.settings.own_l := own_l_2
+htf2.settings.own_c := own_c_2
+
+string effectiveHtf3 = timeframe.in_seconds(htf3.settings.htf) > timeframe.in_seconds() ? htf3.settings.htf : timeframe.period
+[sym1_o_3, sym1_c_3, sym1_h_3, sym1_l_3, sym1_t_3] = request.security(settings.psp_sym1, effectiveHtf3, [open, close, high, low, time], lookahead = barmerge.lookahead_off)
+[sym2_o_3, sym2_c_3, sym2_h_3, sym2_l_3, sym2_t_3] = request.security(settings.psp_sym2, effectiveHtf3, [open, close, high, low, time], lookahead = barmerge.lookahead_off)
+[sym3_o_3, sym3_c_3, sym3_h_3, sym3_l_3, sym3_t_3] = request.security(settings.psp_sym3, effectiveHtf3, [open, close, high, low, time], lookahead = barmerge.lookahead_off)
+[sym4_o_3, sym4_c_3, sym4_h_3, sym4_l_3, sym4_t_3] = request.security(settings.psp_sym4, effectiveHtf3, [open, close, high, low, time], lookahead = barmerge.lookahead_off)
+htf3.settings.sym1_o := sym1_o_3
+htf3.settings.sym1_c := sym1_c_3
+htf3.settings.sym1_h := sym1_h_3
+htf3.settings.sym1_l := sym1_l_3
+htf3.settings.sym1_t := sym1_t_3
+htf3.settings.sym2_o := sym2_o_3
+htf3.settings.sym2_c := sym2_c_3
+htf3.settings.sym2_h := sym2_h_3
+htf3.settings.sym2_l := sym2_l_3
+htf3.settings.sym2_t := sym2_t_3
+htf3.settings.sym3_o := sym3_o_3
+htf3.settings.sym3_c := sym3_c_3
+htf3.settings.sym3_h := sym3_h_3
+htf3.settings.sym3_l := sym3_l_3
+htf3.settings.sym3_t := sym3_t_3
+htf3.settings.sym4_o := sym4_o_3
+htf3.settings.sym4_c := sym4_c_3
+htf3.settings.sym4_h := sym4_h_3
+htf3.settings.sym4_l := sym4_l_3
+htf3.settings.sym4_t := sym4_t_3
+[own_o_3, own_h_3, own_l_3, own_c_3] = request.security(syminfo.tickerid, effectiveHtf3, [open, high, low, close], lookahead = barmerge.lookahead_on)
+htf3.settings.own_o := own_o_3
+htf3.settings.own_h := own_h_3
+htf3.settings.own_l := own_l_3
+htf3.settings.own_c := own_c_3
+
+int cnt = 0
+int last = htf1.HTFEnabled(htf2, htf3)
+int offset = settings.offset
+float htf1_end = na
+float htf2_end = na
+float htf3_end = na
+if htf1.settings.show and ValidTimeframe(htf1.settings.htf)
+    htf1.UpdateTime(offset)
+    htf1.Monitor().Update(offset).FindImbalance()
+    cnt += 1
+    htf1_end := offset + htf1.candles.size() * settings.width + (htf1.candles.size() > 0 ? (htf1.candles.size() - 1) * settings.buffer : 0)
+    offset := offset + (cnt > 0 ? htf1.candles.size() * settings.width + (htf1.candles.size() > 0 ? (htf1.candles.size() - 1) * settings.buffer : 0) + settings.htf_buffer : 0)
+if htf2.settings.show and ValidTimeframe(htf2.settings.htf) and cnt < last
+    htf2.UpdateTime(offset)
+    htf2.Monitor().Update(offset).FindImbalance()
+    cnt += 1
+    htf2_end := offset + htf2.candles.size() * settings.width + (htf2.candles.size() > 0 ? (htf2.candles.size() - 1) * settings.buffer : 0)
+    offset := offset + (cnt > 0 ? htf2.candles.size() * settings.width + (htf2.candles.size() > 0 ? (htf2.candles.size() - 1) * settings.buffer : 0) + settings.htf_buffer : 0)
+if htf3.settings.show and ValidTimeframe(htf3.settings.htf) and cnt < last
+    htf3.Monitor().Update(offset).FindImbalance()
+    htf3_end := offset + htf3.candles.size() * settings.width + (htf3.candles.size() > 0 ? (htf3.candles.size() - 1) * settings.buffer : 0)
+
+if barstate.islast
+    while array.size(chartSmtLines) > 0
+        line.delete(array.pop(chartSmtLines))
+    while array.size(chartSmtLabels) > 0
+        label.delete(array.pop(chartSmtLabels))
+
+if htf1.settings.show and ValidTimeframe(htf1.settings.htf)
+    htf1.DrawSweepAndSMT()
+
+if htf2.settings.show and ValidTimeframe(htf2.settings.htf)
+    htf2.DrawSweepAndSMT()
+
+if htf3.settings.show and ValidTimeframe(htf3.settings.htf)
+    htf3.DrawSweepAndSMT()
+
+if settings.show_sep
+    while separators.size() > 0
+        line.delete(separators.shift())
+    float candleYHi = 0.0
+    float candleYLo = 999999999.0
+    if htf1.settings.show and htf1.candles.size() > 0
+        candleYHii = htf1.candles.CandleSetHigh(candleYHi)
+        candleYHi := candleYHii
+        candleYLo := math.min(candleYLo, htf1.candles.CandleSetLow(candleYHi))
+    if htf2.settings.show and htf2.candles.size() > 0
+        candleYHii = htf2.candles.CandleSetHigh(candleYHi)
+        candleYHi := candleYHii
+        candleYLo := math.min(candleYLo, htf2.candles.CandleSetLow(candleYHi))
+    if htf3.settings.show and htf3.candles.size() > 0
+        candleYHii = htf3.candles.CandleSetHigh(candleYHi)
+        candleYHi := candleYHii
+        candleYLo := math.min(candleYLo, htf3.candles.CandleSetLow(candleYHi))
+    bool hasCandles = candleYHi > 0
+    if hasCandles and htf1.settings.show and not na(htf1_end)
+        int gapX = int(bar_index + htf1_end + math.round(settings.htf_buffer / 2))
+        if htf2.settings.show and not na(htf2_end) or htf3.settings.show and not na(htf3_end)
+            separators.push(line.new(gapX, candleYHi, gapX, candleYLo, xloc = xloc.bar_index, color = settings.sep_color, style = LineStyle(settings.sep_style), width = settings.sep_width))
+    if hasCandles and htf2.settings.show and not na(htf2_end) and htf3.settings.show and not na(htf3_end)
+        int gapX2 = int(bar_index + htf2_end + math.round(settings.htf_buffer / 2))
+        separators.push(line.new(gapX2, candleYHi, gapX2, candleYLo, xloc = xloc.bar_index, color = settings.sep_color, style = LineStyle(settings.sep_style), width = settings.sep_width))
+
+var float allHigh = na
+var float allLow = na
+allHigh := na
+allLow := na
+if htf1.candles.size() > 0
+    for i = 0 to htf1.candles.size() - 1
+        Candle c1 = htf1.candles.get(i)
+        allHigh := na(allHigh) ? c1.h : math.max(allHigh, c1.h)
+        allLow := na(allLow) ? c1.l : math.min(allLow, c1.l)
+if htf2.candles.size() > 0
+    for i = 0 to htf2.candles.size() - 1
+        Candle c2 = htf2.candles.get(i)
+        allHigh := na(allHigh) ? c2.h : math.max(allHigh, c2.h)
+        allLow := na(allLow) ? c2.l : math.min(allLow, c2.l)
+if htf3.candles.size() > 0
+    for i = 0 to htf3.candles.size() - 1
+        Candle c3 = htf3.candles.get(i)
+        allHigh := na(allHigh) ? c3.h : math.max(allHigh, c3.h)
+        allLow := na(allLow) ? c3.l : math.min(allLow, c3.l)
+
+plot(allHigh, title = '(internal) HTF scale anchor high', color = color.new(color.white, 100), display = display.pane)
+plot(allLow, title = '(internal) HTF scale anchor low', color = color.new(color.white, 100), display = display.pane)
+
+// ==========================================
+// XC2
+// ==========================================
+float sepTopPadding = 0.0
+float sepBottomPadding = 0.15
+
+rcStyle = switch rcStyleInput
+    "Dotted" => line.style_dotted
+    "Dashed" => line.style_dashed
+    => line.style_solid
+
+rcLabelSize = switch labelSizeInput
+    "Tiny" => size.tiny
+    "Normal" => size.normal
+    "Large" => size.large
+    => size.small
+
+int tfSeconds = timeframe.in_seconds()
+
+bool isW1_D1 = tfSeconds == 86400
+bool isW1_H4 = tfSeconds == 14400
+bool isD1_H1 = tfSeconds == 3600
+bool isH4_M15 = tfSeconds == 900
+bool isH1_M5 = tfSeconds == 300
+bool isM30_M3 = tfSeconds == 180
+bool isM15_M1 = tfSeconds == 60
+
+bool supported = isW1_D1 or isW1_H4 or isD1_H1 or isH4_M15 or isH1_M5 or isM30_M3 or isM15_M1
+bool visible = supported and not hideRC
+
+string tfLabel = isW1_D1 or isW1_H4 ? "1W" : isD1_H1 ? "1D" : isH4_M15 ? "4H" : isH1_M5 ? "1H" : isM30_M3 ? "30M" : "15M"
+
+f_detect() =>
+    bool bullSweep = low[1] < low[2]
+    bool bearSweep = high[1] > high[2]
+
+    bool bullBack = close[1] > low[2]
+    bool bearBack = close[1] < high[2]
+
+    bool bullColors = close[2] < open[2] and close[1] > open[1]
+    bool bearColors = close[2] > open[2] and close[1] < open[1]
+
+    bool bull = bullSweep and (not requireCloseBack or bullBack) and (not requireColors or bullColors)
+    bool bear = bearSweep and (not requireCloseBack or bearBack) and (not requireColors or bearColors)
+
+    if bull and bear
+        bull := close[1] >= open[1]
+        bear := not bull
+
+    int direction = bull ? 1 : bear ? -1 : 0
+    float level = bull ? low[2] : bear ? high[2] : na
+
+    [direction, level, time[2], time[1], time_close[1]]
+
+[dirW, levelW, c1W, c2W, endW] = request.security(syminfo.tickerid, "W", f_detect(), lookahead=barmerge.lookahead_off)
+// GxT §2.9: XC2 is a detection engine → lookahead_off (was lookahead_on)
+[dirD, levelD, c1D, c2D, endD] = request.security(syminfo.tickerid, "D", f_detect(), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+[dirH4, levelH4, c1H4, c2H4, endH4] = request.security(syminfo.tickerid, "240", f_detect(), lookahead=barmerge.lookahead_off)
+[dirH1, levelH1, c1H1, c2H1, endH1] = request.security(syminfo.tickerid, "60", f_detect(), lookahead=barmerge.lookahead_off)
+[dirM30, levelM30, c1M30, c2M30, endM30] = request.security(syminfo.tickerid, "30", f_detect(), lookahead=barmerge.lookahead_off)
+[dirM15, levelM15, c1M15, c2M15, endM15] = request.security(syminfo.tickerid, "15", f_detect(), lookahead=barmerge.lookahead_off)
+
+int direction = isW1_D1 or isW1_H4 ? dirW :
+     isD1_H1 ? dirD :
+     isH4_M15 ? dirH4 :
+     isH1_M5 ? dirH1 :
+     isM30_M3 ? dirM30 : dirM15
+
+float level = isW1_D1 or isW1_H4 ? levelW :
+     isD1_H1 ? levelD :
+     isH4_M15 ? levelH4 :
+     isH1_M5 ? levelH1 :
+     isM30_M3 ? levelM30 : levelM15
+
+int c1Time = isW1_D1 or isW1_H4 ? c1W :
+     isD1_H1 ? c1D :
+     isH4_M15 ? c1H4 :
+     isH1_M5 ? c1H1 :
+     isM30_M3 ? c1M30 : c1M15
+
+int c2Time = isW1_D1 or isW1_H4 ? c2W :
+     isD1_H1 ? c2D :
+     isH4_M15 ? c2H4 :
+     isH1_M5 ? c2H1 :
+     isM30_M3 ? c2M30 : c2M15
+
+int c2End = isW1_D1 or isW1_H4 ? endW :
+     isD1_H1 ? endD :
+     isH4_M15 ? endH4 :
+     isH1_M5 ? endH1 :
+     isM30_M3 ? endM30 : endM15
+
+bool bull = direction == 1
+bool bear = direction == -1
+
+var array<line> xc2Lines = array.new_line()
+var array<label> xc2Labels = array.new_label()
+var int lastC2 = na
+
+bool validSignal = visible and direction != 0 and not na(level) and not na(c2Time)
+bool newXC2 = validSignal and (na(lastC2) or c2Time != lastC2)
+
+if newXC2
+    lastC2 := c2Time
+
+    int startTime = c1Time
+
+    if supported
+        float bestDifference = 1e20
+        int bestTime = na
+
+        for i = 0 to 120
+            if not na(time[i]) and time[i] >= c1Time and time[i] < c2Time
+                float extreme = bull ? low[i] : high[i]
+                float difference = math.abs(extreme - level)
+
+                if difference < bestDifference
+                    bestDifference := difference
+                    bestTime := time[i]
+
+        if not na(bestTime)
+            startTime := bestTime
+
+    line newLine = line.new(startTime, level, c2End, level, xloc=xloc.bar_time, color=rcColor, width=rcWidth, style=rcStyle)
+
+    label newLabel = na
+
+    if showLabels
+        int midpoint = int(math.round((startTime + c2End) / 2))
+        newLabel := label.new(midpoint, level, "XC2 (" + tfLabel + ")", xloc=xloc.bar_time, style=label.style_none, textcolor=labelColor, size=rcLabelSize)
+
+    array.push(xc2Lines, newLine)
+    array.push(xc2Labels, newLabel)
+
+    if array.size(xc2Lines) > maxMarks
+        line.delete(array.shift(xc2Lines))
+        label oldLabel = array.shift(xc2Labels)
+        if not na(oldLabel)
+            label.delete(oldLabel)
+
+// ==========================================
+// DYNAMIC SEPARATORS
+// ==========================================
+highestP = ta.highest(high, sepLookback)
+lowestP = ta.lowest(low, sepLookback)
+
+span = highestP - lowestP
+chartTop = highestP + span * sepTopPadding
+chartBottom = lowestP - span * sepBottomPadding
+
+chartMin = timeframe.isminutes ? timeframe.multiplier : timeframe.isdaily ? 1440 : timeframe.isweekly ? 10080 : 0
+
+autoTF = chartMin <= 1 ? "15" : chartMin <= 3 ? "30" : chartMin <= 10 ? "60" : chartMin <= 30 ? "240" : chartMin <= 240 ? "D" : "W"
+
+sepTF = sepSelection == "Auto" ? autoTF : sepSelection == "15m" ? "15" : sepSelection == "30m" ? "30" : sepSelection == "1H" ? "60" : sepSelection == "4H" ? "240" : sepSelection == "1D" ? "D" : "W"
+
+bool newSep = ta.change(time(sepTF)) != 0
+
+var array<line> sepLines = array.new_line()
+var array<label> sepLabels = array.new_label()
+
+if enableChartSeparators and newSep
+    line sepLine = line.new(bar_index, chartBottom, bar_index, chartTop, color=sepColor, width=sepWidth)
+
+    label sepLabel = na
+
+    if sepShowLabel
+        bool dailyOrAbove = sepTF == "D" or sepTF == "W"
+        string stamp = dailyOrAbove ? "E" : "HH:mm"
+
+        sepLabel := label.new(bar_index, chartTop, str.format_time(time, stamp, syminfo.timezone), style=label.style_none, textcolor=sepTextColor, size=size.small)
+
+    array.push(sepLines, sepLine)
+    array.push(sepLabels, sepLabel)
+
+    if array.size(sepLines) > 250
+        line.delete(array.shift(sepLines))
+        label oldSepLabel = array.shift(sepLabels)
+        if not na(oldSepLabel)
+            label.delete(oldSepLabel)
+
+if array.size(sepLines) > 0
+    for i = 0 to array.size(sepLines) - 1
+        line.set_y1(array.get(sepLines, i), chartBottom)
+        line.set_y2(array.get(sepLines, i), chartTop)
+
+if array.size(sepLabels) > 0
+    for i = 0 to array.size(sepLabels) - 1
+        label currentLabel = array.get(sepLabels, i)
+        if not na(currentLabel)
+            label.set_y(currentLabel, chartTop)
+
+// ─────────────────────────────────────
+// SESSION OPENS (WO / DO / 00:00 / 9:30 / 10:00)
+// ─────────────────────────────────────
+
+string tz = "America/New_York"
+
+int rightPad = 3
+int labelPad = 0
+int keepDaily = showPrior ? 2 : 1
+int keepWeekly = showPrior ? 2 : 1
+
+int nyDow = dayofweek(time, tz)
+
+int dateNY = year(time, tz) * 10000 + month(time, tz) * 100 + dayofmonth(time, tz)
+
+isOpeningTime(int targetHour, int targetMinute) =>
+    int targetTime = timestamp(
+         "America/New_York",
+         year(time, tz),
+         month(time, tz),
+         dayofmonth(time, tz),
+         targetHour,
+         targetMinute)
+
+    time <= targetTime and time_close > targetTime
+
+bool atWO = nyDow == dayofweek.sunday and isOpeningTime(18, 0)
+bool atDO = isOpeningTime(18, 0)
+bool atMID = isOpeningTime(0, 0)
+bool atNY = isOpeningTime(9, 30)
+bool atTEN = isOpeningTime(10, 0)
+
+var array<line> woLines = array.new<line>()
+var array<label> woLabels = array.new<label>()
+
+var array<line> doLines = array.new<line>()
+var array<label> doLabels = array.new<label>()
+
+var array<line> midLines = array.new<line>()
+var array<label> midLabels = array.new<label>()
+
+var array<line> nyLines = array.new<line>()
+var array<label> nyLabels = array.new<label>()
+
+var array<line> tenLines = array.new<line>()
+var array<label> tenLabels = array.new<label>()
+
+var int lastWO = na
+var int lastDO = na
+var int lastMID = na
+var int lastNY = na
+var int lastTEN = na
+
+var float priceWO = na
+var float priceDO = na
+var float priceMID = na
+var float priceNY = na
+var float priceTEN = na
+
+createLevel(array<line> ls, array<label> lbs, float price, string txt, bool showLbl) =>
+    line ln = line.new(
+         x1=bar_index,
+         y1=price,
+         x2=bar_index + rightPad,
+         y2=price,
+         xloc=xloc.bar_index,
+         extend=extend.none,
+         color=lineColor,
+         style=LineStyle(lineStyle),
+         width=lineWidth)
+    array.push(ls, ln)
+
+    label lb = na
+    if showLbl
+        lb := label.new(
+             x=bar_index + rightPad + labelPad,
+             y=price,
+             text=txt,
+             xloc=xloc.bar_index,
+             yloc=yloc.price,
+             style=label.style_none,
+             color=color.new(lineColor, 100),
+             textcolor=lvlTextColor,
+             size=lvlTextSize,
+             textalign=text.align_left)
+    array.push(lbs, lb)
+
+updateLevel(array<line> ls, array<label> lbs, float price) =>
+    if array.size(ls) > 0
+        line ln = array.get(ls, array.size(ls) - 1)
+        line.set_x2(ln, bar_index + rightPad)
+        line.set_y1(ln, price)
+        line.set_y2(ln, price)
+
+        if array.size(lbs) > 0
+            label lb = array.get(lbs, array.size(lbs) - 1)
+            if not na(lb)
+                label.set_x(lb, bar_index + rightPad + labelPad)
+                label.set_y(lb, price)
+
+freezeLevel(array<line> ls) =>
+    if array.size(ls) > 0
+        line ln = array.get(ls, array.size(ls) - 1)
+        line.set_x2(ln, math.max(line.get_x1(ln), bar_index - 1))
+
+trimLevels(array<line> ls, array<label> lbs, int depth) =>
+    while array.size(ls) > depth
+        line.delete(array.shift(ls))
+
+    while array.size(lbs) > depth
+        label lb = array.shift(lbs)
+        if not na(lb)
+            label.delete(lb)
+
+// WEEKLY OPEN — SUNDAY 18:00 NY
+if showWO and atWO and (na(lastWO) or lastWO != dateNY)
+    if array.size(woLines) > 0
+        freezeLevel(woLines)
+
+    priceWO := open
+    createLevel(woLines, woLabels, priceWO, "WO", showLvlLabels)
+    lastWO := dateNY
+
+if showWO and array.size(woLines) > 0 and not na(priceWO)
+    updateLevel(woLines, woLabels, priceWO)
+
+trimLevels(woLines, woLabels, keepWeekly)
+
+// DAILY OPEN — 18:00 NY
+if showDO and atDO and (na(lastDO) or lastDO != dateNY)
+    if array.size(doLines) > 0
+        freezeLevel(doLines)
+
+    priceDO := open
+    createLevel(doLines, doLabels, priceDO, "DO", showLvlLabels)
+    lastDO := dateNY
+
+if showDO and array.size(doLines) > 0 and not na(priceDO)
+    updateLevel(doLines, doLabels, priceDO)
+
+trimLevels(doLines, doLabels, keepDaily)
+
+// MIDNIGHT OPEN — 00:00 NY
+if showMID and atMID and (na(lastMID) or lastMID != dateNY)
+    if array.size(midLines) > 0
+        freezeLevel(midLines)
+
+    priceMID := open
+    createLevel(midLines, midLabels, priceMID, "00:00", showLvlLabels)
+    lastMID := dateNY
+
+if showMID and array.size(midLines) > 0 and not na(priceMID)
+    updateLevel(midLines, midLabels, priceMID)
+
+trimLevels(midLines, midLabels, keepDaily)
+
+// NY EQUITY OPEN — 09:30 NY
+if showNY and atNY and (na(lastNY) or lastNY != dateNY)
+    if array.size(nyLines) > 0
+        freezeLevel(nyLines)
+
+    priceNY := open
+    createLevel(nyLines, nyLabels, priceNY, "9:30", showLvlLabels)
+    lastNY := dateNY
+
+if showNY and array.size(nyLines) > 0 and not na(priceNY)
+    updateLevel(nyLines, nyLabels, priceNY)
+
+trimLevels(nyLines, nyLabels, keepDaily)
+
+// NY REFERENCE — 10:00 NY
+if showTEN and atTEN and (na(lastTEN) or lastTEN != dateNY)
+    if array.size(tenLines) > 0
+        freezeLevel(tenLines)
+
+    priceTEN := open
+    createLevel(tenLines, tenLabels, priceTEN, "10:00", showLvlLabels)
+    lastTEN := dateNY
+
+if showTEN and array.size(tenLines) > 0 and not na(priceTEN)
+    updateLevel(tenLines, tenLabels, priceTEN)
+
+trimLevels(tenLines, tenLabels, keepDaily)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ▼▼▼ SWING SMT ENGINE (chart timeframe, up to 4 correlated assets) ▼▼▼
+// Bearish text = above the line, Bullish text = below the line
+// GxT 3.2 swing confirmed one bar AFTER the peak (barstate.isconfirmed)
+// GxT 3.3 equal highs/lows rejected on chart asset AND on each correlated asset
+// GxT 3.6 every asset read at the same bar reference ([1])
+// GxT 3.7 inverse toggle flips the divergence logic per asset
+// GxT 2.3 ONE tuple per asset: [high, low, close, open, mintick]  (was 2 calls per asset)
+// ═══════════════════════════════════════════════════════════════════════════
+
+float smtTol = smtTolTicks * syminfo.mintick
+
+[smtB1h, smtB1l, smtB1c, smtB1o, smtMt1] = request.security(settings.psp_sym1, timeframe.period, [high, low, close, open, syminfo.mintick], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+[smtB2h, smtB2l, smtB2c, smtB2o, smtMt2] = request.security(settings.psp_sym2, timeframe.period, [high, low, close, open, syminfo.mintick], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+[smtB3h, smtB3l, smtB3c, smtB3o, smtMt3] = request.security(settings.psp_sym3, timeframe.period, [high, low, close, open, syminfo.mintick], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+[smtB4h, smtB4l, smtB4c, smtB4o, smtMt4] = request.security(settings.psp_sym4, timeframe.period, [high, low, close, open, syminfo.mintick], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+
+// Each correlated asset has its own tick size, so the tolerance is built per asset.
+array<float> smtTolA  = array.from(nz(smtMt1, syminfo.mintick) * smtTolTicks, nz(smtMt2, syminfo.mintick) * smtTolTicks, nz(smtMt3, syminfo.mintick) * smtTolTicks, nz(smtMt4, syminfo.mintick) * smtTolTicks)
+array<float> ssmtTolA = array.from(nz(smtMt1, syminfo.mintick) * ssmtTolTicks, nz(smtMt2, syminfo.mintick) * ssmtTolTicks, nz(smtMt3, syminfo.mintick) * ssmtTolTicks, nz(smtMt4, syminfo.mintick) * ssmtTolTicks)
+
+array<float>  smtBHi   = array.from(smtB1h[1], smtB2h[1], smtB3h[1], smtB4h[1])
+array<float>  smtBLo   = array.from(smtB1l[1], smtB2l[1], smtB3l[1], smtB4l[1])
+array<bool>   smtUse   = array.from(settings.psp_sym1_use, settings.psp_sym2_use, settings.psp_sym3_use, settings.psp_sym4_use)
+array<bool>   smtInvA  = array.from(smtInv1, smtInv2, smtInv3, smtInv4)
+array<string> smtNames = array.from(ShortTicker(settings.psp_sym1), ShortTicker(settings.psp_sym2), ShortTicker(settings.psp_sym3), ShortTicker(settings.psp_sym4))
+
+var float smtPrevHiA    = na
+var int   smtPrevHiBarA = na
+var float smtPrevLoA    = na
+var int   smtPrevLoBarA = na
+var array<float> smtPrevHiB = array.new_float(4, na)
+var array<float> smtPrevLoB = array.new_float(4, na)
+
+bool bearSMT = false
+bool bullSMT = false
+
+if smtEnable and smtSwingOn and barstate.isconfirmed
+    bool swingHi = high[1] > high[0] and high[1] > high[2]
+    bool swingLo = low[1]  < low[0]  and low[1]  < low[2]
+
+    // ── Swing HIGH → bearish SMT (text above the line) ──
+    if swingHi
+        float aHi    = high[1]
+        int   aHiBar = bar_index - 1
+        // chart asset must make a CLEAR higher high (beyond tolerance)
+        if not na(smtPrevHiA) and aHi > smtPrevHiA + smtTol
+            int divCnt = 0
+            string divNames = ""
+            for k = 0 to 3
+                float bNow  = smtBHi.get(k)
+                float bPrev = smtPrevHiB.get(k)
+                if smtUse.get(k) and not na(bNow) and not na(bPrev)
+                    float tolK = smtTolA.get(k)
+                    bool bMadeHigh = bNow > bPrev + tolK
+                    bool bEqual    = math.abs(bNow - bPrev) <= tolK
+                    bool diverges  = false
+                    if not (smtRejectEqual and bEqual)
+                        diverges := smtInvA.get(k) ? bMadeHigh : not bMadeHigh
+                    if diverges
+                        divCnt += 1
+                        divNames += (divNames == "" ? "" : " ") + smtNames.get(k)
+            if divCnt >= smtMinAssets
+                bearSMT := true
+                [swLn, swLb] = f_smtMark(smtPrevHiBarA, smtPrevHiA, aHiBar, aHi, true, HTFName(timeframe.period), "Swing SMT", divNames, smtBearCol, div_line_style, math.max(div_line_width, 1), smt_text_col, smt_label_show)
+                array.push(smtLines, swLn)
+                array.push(smtLabels, swLb)
+        smtPrevHiA := aHi
+        smtPrevHiBarA := aHiBar
+        for k = 0 to 3
+            if not na(smtBHi.get(k))
+                smtPrevHiB.set(k, smtBHi.get(k))
+
+    // ── Swing LOW → bullish SMT (text below the line) ──
+    if swingLo
+        float aLo    = low[1]
+        int   aLoBar = bar_index - 1
+        if not na(smtPrevLoA) and aLo < smtPrevLoA - smtTol
+            int divCntL = 0
+            string divNamesL = ""
+            for k = 0 to 3
+                float bNowL  = smtBLo.get(k)
+                float bPrevL = smtPrevLoB.get(k)
+                if smtUse.get(k) and not na(bNowL) and not na(bPrevL)
+                    float tolKL = smtTolA.get(k)
+                    bool bMadeLow = bNowL < bPrevL - tolKL
+                    bool bEqualL  = math.abs(bNowL - bPrevL) <= tolKL
+                    bool divergesL = false
+                    if not (smtRejectEqual and bEqualL)
+                        divergesL := smtInvA.get(k) ? bMadeLow : not bMadeLow
+                    if divergesL
+                        divCntL += 1
+                        divNamesL += (divNamesL == "" ? "" : " ") + smtNames.get(k)
+            if divCntL >= smtMinAssets
+                bullSMT := true
+                [swLnL, swLbL] = f_smtMark(smtPrevLoBarA, smtPrevLoA, aLoBar, aLo, false, HTFName(timeframe.period), "Swing SMT", divNamesL, smtBullCol, div_line_style, math.max(div_line_width, 1), smt_text_col, smt_label_show)
+                array.push(smtLines, swLnL)
+                array.push(smtLabels, swLbL)
+        smtPrevLoA := aLo
+        smtPrevLoBarA := aLoBar
+        for k = 0 to 3
+            if not na(smtBLo.get(k))
+                smtPrevLoB.set(k, smtBLo.get(k))
+
+    while array.size(smtLines) > smtMax
+        line.delete(array.shift(smtLines))
+        label.delete(array.shift(smtLabels))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ▼▼▼ SSMT ENGINE (two consecutive CLOSED HTF candles) ▼▼▼
+// GxT 3.8: LTF accumulator registers (no request.security for the HTF candle),
+//          compared on the boundary bar only.
+// GxT 3.1: 90m+ only (toggle).
+// GxT 3.3: equal highs/lows on correlated assets rejected (per-asset ticks).
+// GxT 6.1: SSMT lines default DASHED.  Label: "[TF]\n[TICKERS]".
+// ═══════════════════════════════════════════════════════════════════════════
+
+array<float> ssmtBH = array.from(smtB1h, smtB2h, smtB3h, smtB4h)
+array<float> ssmtBL = array.from(smtB1l, smtB2l, smtB3l, smtB4l)
+array<bool> ssmtInvA = array.from(ssmtInv1, ssmtInv2, ssmtInv3, ssmtInv4)
+float ssmtTol = ssmtTolTicks * syminfo.mintick
+
+// Candle-pair divergence scanner (two consecutive CLOSED candles of timeframe tf).
+// Used twice: SMT per timeframe (section 8 switches) and SSMT (90m and above).
+candleScan(string tf, string tfTxt, bool enabled, int minSecs, string kind, float tol, array<float> tolA, array<bool> invA, int minAssets, color bearC, color bullC, string styleStr, int w, color tc, bool showNames, array<line> lns, array<label> lbs, int maxN, bool draw) =>
+    // chart asset registers: P = previous closed, C = last closed, R = forming
+    var float aPH = na
+    var float aPL = na
+    var int   aPHb = na
+    var int   aPLb = na
+    var float aCH = na
+    var float aCL = na
+    var int   aCHb = na
+    var int   aCLb = na
+    var float aRH = na
+    var float aRL = na
+    var int   aRHb = na
+    var int   aRLb = na
+    var int   rT = na
+    var array<float> bPH = array.new_float(4, na)
+    var array<float> bPL = array.new_float(4, na)
+    var array<float> bCH = array.new_float(4, na)
+    var array<float> bCL = array.new_float(4, na)
+    var array<float> bRH = array.new_float(4, na)
+    var array<float> bRL = array.new_float(4, na)
+
+    bool bullOut = false
+    bool bearOut = false
+    int htfT = time(tf)
+    int tfSecs = timeframe.in_seconds(tf)
+    bool valid = enabled and tfSecs >= minSecs and not na(htfT) and tfSecs > timeframe.in_seconds()
+
+    if valid
+        bool isNew = na(rT) or htfT != rT
+        if isNew
+            aPH := aCH
+            aPL := aCL
+            aPHb := aCHb
+            aPLb := aCLb
+            aCH := aRH
+            aCL := aRL
+            aCHb := aRHb
+            aCLb := aRLb
+            for k = 0 to 3
+                bPH.set(k, bCH.get(k))
+                bPL.set(k, bCL.get(k))
+                bCH.set(k, bRH.get(k))
+                bCL.set(k, bRL.get(k))
+                bRH.set(k, ssmtBH.get(k))
+                bRL.set(k, ssmtBL.get(k))
+            aRH := high
+            aRL := low
+            aRHb := bar_index
+            aRLb := bar_index
+            rT := htfT
+        else
+            if high > aRH
+                aRH := high
+                aRHb := bar_index
+            if low < aRL
+                aRL := low
+                aRLb := bar_index
+            for k = 0 to 3
+                float bh = ssmtBH.get(k)
+                float bl = ssmtBL.get(k)
+                if not na(bh)
+                    bRH.set(k, na(bRH.get(k)) ? bh : math.max(bRH.get(k), bh))
+                if not na(bl)
+                    bRL.set(k, na(bRL.get(k)) ? bl : math.min(bRL.get(k), bl))
+
+        // detect only on the boundary bar (previous candle just closed)
+        if isNew and barstate.isconfirmed and not na(aPH) and not na(aCH) and not na(aPL) and not na(aCL)
+            // bearish: chart asset took the previous high
+            if aCH > aPH + tol
+                int ssCnt = 0
+                string ssNm = ""
+                for k = 0 to 3
+                    float bc = bCH.get(k)
+                    float bp = bPH.get(k)
+                    if smtUse.get(k) and not na(bc) and not na(bp)
+                        float tolK = tolA.get(k)
+                        bool made  = bc > bp + tolK
+                        bool eq    = math.abs(bc - bp) <= tolK
+                        bool dv    = false
+                        if not (smtRejectEqual and eq)
+                            dv := invA.get(k) ? made : not made
+                        if dv
+                            ssCnt += 1
+                            ssNm += (ssNm == "" ? "" : " ") + smtNames.get(k)
+                if ssCnt >= minAssets
+                    bearOut := true
+                    if draw
+                        [ssLn, ssLb] = f_smtMark(aPHb, aPH, aCHb, aCH, true, tfTxt, kind, ssNm, bearC, styleStr, w, tc, showNames)
+                        array.push(lns, ssLn)
+                        array.push(lbs, ssLb)
+            // bullish: chart asset took the previous low
+            if aCL < aPL - tol
+                int ssCntL = 0
+                string ssNmL = ""
+                for k = 0 to 3
+                    float bcL = bCL.get(k)
+                    float bpL = bPL.get(k)
+                    if smtUse.get(k) and not na(bcL) and not na(bpL)
+                        float tolKL = tolA.get(k)
+                        bool madeL = bcL < bpL - tolKL
+                        bool eqL   = math.abs(bcL - bpL) <= tolKL
+                        bool dvL   = false
+                        if not (smtRejectEqual and eqL)
+                            dvL := invA.get(k) ? madeL : not madeL
+                        if dvL
+                            ssCntL += 1
+                            ssNmL += (ssNmL == "" ? "" : " ") + smtNames.get(k)
+                if ssCntL >= minAssets
+                    bullOut := true
+                    if draw
+                        [ssLnL, ssLbL] = f_smtMark(aPLb, aPL, aCLb, aCL, false, tfTxt, kind, ssNmL, bullC, styleStr, w, tc, showNames)
+                        array.push(lns, ssLnL)
+                        array.push(lbs, ssLbL)
+            while array.size(lns) > maxN
+                line.delete(array.shift(lns))
+                label.delete(array.shift(lbs))
+    [bullOut, bearOut]
+
+// ── SMT per timeframe (follows the switches in section 8; skipped where SSMT already covers that TF) ──
+bool smtTfBase = smtEnable and smtChartLines
+[smBull15, smBear15] = candleScan("15",  "15m", smtTfBase and smt_en_15m, 0, "SMT", smtTol, smtTolA, smtInvA, smtMinAssets, smtBearCol, smtBullCol, div_line_style, div_line_width, smt_text_col, smt_label_show, smtLines, smtLabels, smtMax, not isPanelTf(900))
+[smBull30, smBear30] = candleScan("30",  "30m", smtTfBase and smt_en_30m, 0, "SMT", smtTol, smtTolA, smtInvA, smtMinAssets, smtBearCol, smtBullCol, div_line_style, div_line_width, smt_text_col, smt_label_show, smtLines, smtLabels, smtMax, not isPanelTf(1800))
+[smBull1h, smBear1h] = candleScan("60",  "1H",  smtTfBase and smt_en_1h, 0, "SMT", smtTol, smtTolA, smtInvA, smtMinAssets, smtBearCol, smtBullCol, div_line_style, div_line_width, smt_text_col, smt_label_show, smtLines, smtLabels, smtMax, not isPanelTf(3600))
+[smBull90, smBear90] = candleScan("90", "90m", smtTfBase and smt_en_90m, 0, "SMT", smtTol, smtTolA, smtInvA, smtMinAssets, smtBearCol, smtBullCol, div_line_style, div_line_width, smt_text_col, smt_label_show, smtLines, smtLabels, smtMax, true)
+[smBull4h, smBear4h] = candleScan("240", "4H",  smtTfBase and smt_en_4h and not (smtSkipDupSSMT and ssmtOn and ssmt_en_4h), 0, "SMT", smtTol, smtTolA, smtInvA, smtMinAssets, smtBearCol, smtBullCol, div_line_style, div_line_width, smt_text_col, smt_label_show, smtLines, smtLabels, smtMax, not isPanelTf(14400))
+[smBull6h, smBear6h] = candleScan("360", "6H",  smtTfBase and smt_en_6h and not (smtSkipDupSSMT and ssmtOn and ssmt_en_6h), 0, "SMT", smtTol, smtTolA, smtInvA, smtMinAssets, smtBearCol, smtBullCol, div_line_style, div_line_width, smt_text_col, smt_label_show, smtLines, smtLabels, smtMax, not isPanelTf(21600))
+[smBull7h, smBear7h] = candleScan("420", "7H",  smtTfBase and smt_en_7h and not (smtSkipDupSSMT and ssmtOn and ssmt_en_7h), 0, "SMT", smtTol, smtTolA, smtInvA, smtMinAssets, smtBearCol, smtBullCol, div_line_style, div_line_width, smt_text_col, smt_label_show, smtLines, smtLabels, smtMax, not isPanelTf(25200))
+[smBull1d, smBear1d] = candleScan("D",   "1D",  smtTfBase and smt_en_1d and not (smtSkipDupSSMT and ssmtOn and ssmt_en_1d), 0, "SMT", smtTol, smtTolA, smtInvA, smtMinAssets, smtBearCol, smtBullCol, div_line_style, div_line_width, smt_text_col, smt_label_show, smtLines, smtLabels, smtMax, not isPanelTf(86400))
+[smBull1w, smBear1w] = candleScan("W",   "1W",  smtTfBase and smt_en_1w and not (smtSkipDupSSMT and ssmtOn and ssmt_en_1w), 0, "SMT", smtTol, smtTolA, smtInvA, smtMinAssets, smtBearCol, smtBullCol, div_line_style, div_line_width, smt_text_col, smt_label_show, smtLines, smtLabels, smtMax, not isPanelTf(604800))
+
+// ── SSMT (90m and above only; 15m / 30m / 1H are not available here) ──
+[ssBull90, ssBear90] = candleScan("90", "90m", ssmtOn and ssmt_en_90m, 5400, "SSMT", ssmtTol, ssmtTolA, ssmtInvA, ssmtMinAssets, ssmtBearCol, ssmtBullCol, ssmt_line_style, ssmt_line_width, ssmt_text_col, ssmt_label_show, ssmtLines, ssmtLabels, ssmtMax, true)
+[ssBull4h, ssBear4h] = candleScan("240", "4H",  ssmtOn and ssmt_en_4h, 5400, "SSMT", ssmtTol, ssmtTolA, ssmtInvA, ssmtMinAssets, ssmtBearCol, ssmtBullCol, ssmt_line_style, ssmt_line_width, ssmt_text_col, ssmt_label_show, ssmtLines, ssmtLabels, ssmtMax, not isPanelTf(14400))
+[ssBull6h, ssBear6h] = candleScan("360", "6H",  ssmtOn and ssmt_en_6h, 5400, "SSMT", ssmtTol, ssmtTolA, ssmtInvA, ssmtMinAssets, ssmtBearCol, ssmtBullCol, ssmt_line_style, ssmt_line_width, ssmt_text_col, ssmt_label_show, ssmtLines, ssmtLabels, ssmtMax, not isPanelTf(21600))
+[ssBull7h, ssBear7h] = candleScan("420", "7H",  ssmtOn and ssmt_en_7h, 5400, "SSMT", ssmtTol, ssmtTolA, ssmtInvA, ssmtMinAssets, ssmtBearCol, ssmtBullCol, ssmt_line_style, ssmt_line_width, ssmt_text_col, ssmt_label_show, ssmtLines, ssmtLabels, ssmtMax, not isPanelTf(25200))
+[ssBull1d, ssBear1d] = candleScan("D",   "1D",  ssmtOn and ssmt_en_1d, 5400, "SSMT", ssmtTol, ssmtTolA, ssmtInvA, ssmtMinAssets, ssmtBearCol, ssmtBullCol, ssmt_line_style, ssmt_line_width, ssmt_text_col, ssmt_label_show, ssmtLines, ssmtLabels, ssmtMax, not isPanelTf(86400))
+[ssBull1w, ssBear1w] = candleScan("W",   "1W",  ssmtOn and ssmt_en_1w, 5400, "SSMT", ssmtTol, ssmtTolA, ssmtInvA, ssmtMinAssets, ssmtBearCol, ssmtBullCol, ssmt_line_style, ssmt_line_width, ssmt_text_col, ssmt_label_show, ssmtLines, ssmtLabels, ssmtMax, not isPanelTf(604800))
+
+bool bullSSMT = ssBull90 or ssBull4h or ssBull6h or ssBull7h or ssBull1d or ssBull1w
+bool bearSSMT = ssBear90 or ssBear4h or ssBear6h or ssBear7h or ssBear1d or ssBear1w
+bool bullTfSMT = smBull15 or smBull30 or smBull1h or smBull90 or smBull4h or smBull6h or smBull7h or smBull1d or smBull1w
+bool bearTfSMT = smBear15 or smBear30 or smBear1h or smBear90 or smBear4h or smBear6h or smBear7h or smBear1d or smBear1w
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ▼▼▼ FVG ENGINE (30m / 1H / 4H, separate settings per timeframe) ▼▼▼
+// ═══════════════════════════════════════════════════════════════════════════
+
+var array<box>   fvgBoxes = array.new_box()
+var array<line>  fvgCEs   = array.new_line()
+var array<float> fvgTop   = array.new_float()
+var array<float> fvgBot   = array.new_float()
+var array<int>   fvgDir   = array.new_int()
+var array<int>   fvgBorn  = array.new_int()
+var array<int>   fvgSec   = array.new_int()
+var array<bool>  fvgDone  = array.new_bool()
+
+bool bullFVG = false
+bool bearFVG = false
+bool fvgMitHit = false
+int fvgSC = timeframe.in_seconds()
+int fvgBarMs = fvgSC * 1000
+// Previous confirmed daily ATR, shared by 30m / 1H / 4H FVGs.
+float fvgDailyAtr = request.security(syminfo.tickerid, "D", ta.atr(14)[1], lookahead = barmerge.lookahead_on)
+
+string fvgTfA = "30"
+string fvgTfB = "60"
+string fvgTfC = "240"
+int fvgSA = 1800
+int fvgSB = 3600
+int fvgSC3 = 14400
+
+bool fvgClA = not na(time_close(fvgTfA)) and time_close(fvgTfA) == time_close
+bool fvgClB = not na(time_close(fvgTfB)) and time_close(fvgTfB) == time_close
+bool fvgClC = not na(time_close(fvgTfC)) and time_close(fvgTfC) == time_close
+
+// per-timeframe setting pickers
+fvgClosing(int sec) =>
+    sec == fvgSA ? fvgClA : sec == fvgSB ? fvgClB : fvgClC
+
+fvgTfLabel(int sec) =>
+    sec == 1800 ? "30m" : sec == 3600 ? "1H" : "4H"
+
+fvgBullColOf(int sec) =>
+    sec == 1800 ? fvgBull30 : sec == 3600 ? fvgBull60 : fvgBull240
+
+fvgBearColOf(int sec) =>
+    sec == 1800 ? fvgBear30 : sec == 3600 ? fvgBear60 : fvgBear240
+
+fvgMitOf(int sec) =>
+    sec == 1800 ? fvgMit30 : sec == 3600 ? fvgMit60 : fvgMit240
+
+fvgKillOf(int sec) =>
+    sec == 1800 ? fvgKill30 : sec == 3600 ? fvgKill60 : fvgKill240
+
+fvgMinOf(int sec) =>
+    (sec == 1800 ? fvgMin30 : sec == 3600 ? fvgMin60 : fvgMin240) * syminfo.mintick
+
+fvgLblOf(int sec) =>
+    sec == 1800 ? fvgLbl30 : sec == 3600 ? fvgLbl60 : fvgLbl240
+
+fvgEnabledOf(int sec) =>
+    sec == 1800 ? fvgShow30 : sec == 3600 ? fvgShow60 : fvgShow240
+
+fvgIsNear(float gTop, float gBot) =>
+    float dist = close > gTop ? close - gTop : close < gBot ? gBot - close : 0.0
+    not fvgAtrVisible or fvgMaxDistAtr <= 0 or na(fvgDailyAtr) or dist <= fvgMaxDistAtr * fvgDailyAtr
+
+fvgDistOf(float gTop, float gBot) =>
+    close > gTop ? close - gTop : close < gBot ? gBot - close : 0.0
+
+fvgOverlaps(bool isBull, float gTop, float gBot, int sec) =>
+    bool hit = false
+    int n = array.size(fvgBoxes)
+    if n > 0
+        for i = 0 to n - 1
+            if not array.get(fvgDone, i) and array.get(fvgDir, i) == (isBull ? 1 : -1) and array.get(fvgSec, i) >= sec and gBot < array.get(fvgTop, i) and gTop > array.get(fvgBot, i)
+                hit := true
+    hit
+
+fvgAdd(bool isBull, float gTop, float gBot, int leftTime, int sec) =>
+    bool added = false
+    bool bigEnough = gTop > gBot and (gTop - gBot) >= math.max(fvgMinOf(sec), fvgMinGapAtr * nz(fvgDailyAtr, 0.0))
+    bool dup = fvgNoOverlap and fvgOverlaps(isBull, gTop, gBot, sec)
+    if bigEnough and not dup and not na(leftTime)
+        color c = isBull ? fvgBullColOf(sec) : fvgBearColOf(sec)
+        bool visibleNow = fvgOn and fvgEnabledOf(sec) and fvgIsNear(gTop, gBot)
+        int rightT = time + fvgExt * fvgBarMs
+        float mid = (gTop + gBot) / 2
+        box bx = box.new(leftTime, gTop, rightT, gBot, xloc = xloc.bar_time,
+             bgcolor = visibleNow ? c : color(na), border_color = visibleNow ? color.new(c, fvgBorderTr) : color(na), border_width = 1,
+             text = fvgLblOf(sec) ? "FVG (" + fvgTfLabel(sec) + ")" : "",
+             text_halign = text.align_right, text_valign = text.align_center,
+             text_size = fvgLblSize, text_color = visibleNow ? color.new(c, 0) : color(na))
+        line ce = fvgCE ? line.new(leftTime, mid, rightT, mid, xloc = xloc.bar_time, color = visibleNow ? color.new(c, 40) : color(na), style = line.style_dotted, width = 1) : na
+        array.push(fvgBoxes, bx)
+        array.push(fvgCEs, ce)
+        array.push(fvgTop, gTop)
+        array.push(fvgBot, gBot)
+        array.push(fvgDir, isBull ? 1 : -1)
+        array.push(fvgBorn, bar_index)
+        array.push(fvgSec, sec)
+        array.push(fvgDone, false)
+        while array.size(fvgBoxes) > fvgMax
+            box.delete(array.shift(fvgBoxes))
+            line.delete(array.shift(fvgCEs))
+            array.shift(fvgTop)
+            array.shift(fvgBot)
+            array.shift(fvgDir)
+            array.shift(fvgBorn)
+            array.shift(fvgSec)
+            array.shift(fvgDone)
+        added := true
+    added
+
+fvgScan(string tf, int tfSec, bool enabled) =>
+    var float aH = na
+    var float aL = na
+    var int   aT = na
+    var float bH = na
+    var float bL = na
+    var int   bT = na
+    var float dH = na
+    var float dL = na
+    var int   dT = na
+    bool bullAdd = false
+    bool bearAdd = false
+    int htfOpen = time(tf)
+    if not na(htfOpen)
+        if na(dT) or htfOpen != dT
+            aH := bH
+            aL := bL
+            aT := bT
+            bH := dH
+            bL := dL
+            bT := dT
+            dH := high
+            dL := low
+            dT := htfOpen
+        else
+            dH := math.max(dH, high)
+            dL := math.min(dL, low)
+    bool lastBar = not na(htfOpen) and time_close(tf) == time_close
+    if enabled and tfSec > fvgSC and lastBar and barstate.isconfirmed
+        if dL > aH
+            bullAdd := fvgAdd(true, dL, aH, aT, tfSec)
+        if dH < aL
+            bearAdd := fvgAdd(false, aL, dH, aT, tfSec)
+    [bullAdd, bearAdd]
+
+// ── Mitigation (each gap uses its own timeframe's rule) ──
+if fvgOn and barstate.isconfirmed
+    int idx = array.size(fvgBoxes) - 1
+    while idx >= 0
+        float gTop = array.get(fvgTop, idx)
+        float gBot = array.get(fvgBot, idx)
+        bool  isBullGap = array.get(fvgDir, idx) == 1
+        int   gSec = array.get(fvgSec, idx)
+        string mitRule = fvgMitOf(gSec)
+        bool  drop = false
+        if array.get(fvgDone, idx)
+            drop := isBullGap ? close < gBot : close > gTop
+        else if bar_index > array.get(fvgBorn, idx)
+            bool mit = false
+            if mitRule == FVG_MIT_WICK
+                mit := isBullGap ? low <= gTop : high >= gBot
+            else if mitRule == FVG_MIT_FULL
+                mit := isBullGap ? low <= gBot : high >= gTop
+            else
+                mit := fvgClosing(gSec) and (isBullGap ? close <= gTop : close >= gBot)
+            if mit
+                fvgMitHit := true
+                if fvgKillOf(gSec) or not fvgFreezeMit
+                    drop := true
+                else
+                    box  gb = array.get(fvgBoxes, idx)
+                    line gl = array.get(fvgCEs, idx)
+                    box.set_right(gb, time)
+                    box.set_bgcolor(gb, fvgMitCol)
+                    box.set_border_color(gb, color.new(C_GRAY, 85))
+                    box.set_text_color(gb, color.new(C_GRAY, 60))
+                    if not na(gl)
+                        line.set_x2(gl, time)
+                        line.set_color(gl, color.new(C_GRAY, 70))
+                    array.set(fvgDone, idx, true)
+        if drop
+            box.delete(array.get(fvgBoxes, idx))
+            line gd = array.get(fvgCEs, idx)
+            if not na(gd)
+                line.delete(gd)
+            array.remove(fvgBoxes, idx)
+            array.remove(fvgCEs, idx)
+            array.remove(fvgTop, idx)
+            array.remove(fvgBot, idx)
+            array.remove(fvgDir, idx)
+            array.remove(fvgBorn, idx)
+            array.remove(fvgSec, idx)
+            array.remove(fvgDone, idx)
+        idx -= 1
+
+// ── Per-timeframe scans (each has its own on/off button) ──
+[fvgBullA, fvgBearA] = fvgScan(fvgTfA, fvgSA, fvgOn and fvgShow30)
+[fvgBullB, fvgBearB] = fvgScan(fvgTfB, fvgSB, fvgOn and fvgShow60)
+[fvgBullC, fvgBearC] = fvgScan(fvgTfC, fvgSC3, fvgOn and fvgShow240)
+bullFVG := fvgBullA or fvgBullB or fvgBullC
+bearFVG := fvgBearA or fvgBearB or fvgBearC
+
+// ── Refresh FVG visuals on every last-bar execution. ──
+// All timeframes use one daily ATR proximity filter; hidden zones remain tracked.
+// Tapped FVGs keep their frozen right boundary and are removed on full break.
+if barstate.islast
+    int nG = array.size(fvgBoxes)
+    if nG > 0
+        for i = 0 to nG - 1
+            box gb = array.get(fvgBoxes, i)
+            line gl = array.get(fvgCEs, i)
+            int sec = array.get(fvgSec, i)
+            bool done = array.get(fvgDone, i)
+            bool isBull = array.get(fvgDir, i) == 1
+            float top = array.get(fvgTop, i)
+            float bot = array.get(fvgBot, i)
+            bool vis = fvgOn and fvgEnabledOf(sec) and fvgIsNear(top, bot)
+            // hide a gap that sits inside an active higher-TF gap (same direction)
+            if vis and not done and fvgHideNested
+                for j = 0 to nG - 1
+                    if j != i and not array.get(fvgDone, j) and array.get(fvgDir, j) == array.get(fvgDir, i) and array.get(fvgSec, j) > sec and fvgEnabledOf(array.get(fvgSec, j))
+                        if bot < array.get(fvgTop, j) and top > array.get(fvgBot, j)
+                            vis := false
+                            break
+            // keep only the N nearest unmitigated gaps
+            if vis and not done and fvgMaxVisible > 0
+                float myDist = fvgDistOf(top, bot)
+                int closer = 0
+                for j = 0 to nG - 1
+                    if j != i and not array.get(fvgDone, j) and fvgEnabledOf(array.get(fvgSec, j))
+                        if fvgDistOf(array.get(fvgTop, j), array.get(fvgBot, j)) < myDist
+                            closer += 1
+                if closer >= fvgMaxVisible
+                    vis := false
+            color baseCol = isBull ? fvgBullColOf(sec) : fvgBearColOf(sec)
+            color boxCol = done ? fvgMitCol : baseCol
+            box.set_bgcolor(gb, vis ? boxCol : color(na))
+            box.set_border_color(gb, vis ? (done ? color.new(C_GRAY, 85) : color.new(baseCol, fvgBorderTr)) : color(na))
+            box.set_text_color(gb, vis ? (done ? color.new(C_GRAY, 60) : color.new(baseCol, 0)) : color(na))
+            if not done
+                box.set_right(gb, time + fvgExt * fvgBarMs)
+            if not na(gl)
+                line.set_color(gl, vis ? (done ? color.new(C_GRAY, 70) : color.new(baseCol, 40)) : color(na))
+                if not done
+                    line.set_x2(gl, time + fvgExt * fvgBarMs)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ▼▼▼ PSP ENGINE (closed HTF candle colour divergence) ▼▼▼
+// PSP = on a CLOSED HTF candle, the chart asset's colour differs from a
+//       correlated asset's colour (inverse assets: SAME colour = divergence).
+// Direction (needed for confluence): the closed candle swept the previous
+//       HTF candle's LOW → bullish PSP, swept the previous HIGH → bearish PSP.
+//       If both were swept, the chart candle's close decides.
+// Accumulator pattern (GxT §3.8) — same bar reference for all assets (§3.6),
+// evaluated on the HTF boundary bar only, gated by barstate.isconfirmed.
+// ═══════════════════════════════════════════════════════════════════════════
+
+array<float> pspBC   = array.from(smtB1c, smtB2c, smtB3c, smtB4c)
+array<float> pspBO   = array.from(smtB1o, smtB2o, smtB3o, smtB4o)
+
+pspScan(string tf, bool enabled) =>
+    var float aO = na
+    var float aC = na
+    var float aH = na
+    var float aL = na
+    var float pH = na
+    var float pL = na
+    var int   rT = na
+    var array<float> bO = array.new_float(4, na)
+    var array<float> bC = array.new_float(4, na)
+
+    bool bullOut = false
+    bool bearOut = false
+    int htfT = time(tf)
+    int tfSecs = timeframe.in_seconds(tf)
+    bool valid = enabled and not na(htfT) and tfSecs > timeframe.in_seconds()
+
+    if valid
+        bool isNew = na(rT) or htfT != rT
+        if isNew
+            // evaluate the candle that JUST closed (registers still hold it)
+            if barstate.isconfirmed and not na(aO) and not na(aC) and not na(pH) and not na(pL) and aC != aO
+                bool chartBull = aC > aO
+                bool sweptHi = aH > pH
+                bool sweptLo = aL < pL
+                int pspCnt = 0
+                for k = 0 to 3
+                    float bo = bO.get(k)
+                    float bc = bC.get(k)
+                    if smtUse.get(k) and not na(bo) and not na(bc) and bc != bo
+                        bool bBull = bc > bo
+                        bool differs = smtInvA.get(k) ? bBull == chartBull : bBull != chartBull
+                        if differs
+                            pspCnt += 1
+                if pspCnt >= 1
+                    bullOut := sweptLo and (not sweptHi or chartBull)
+                    bearOut := sweptHi and (not sweptLo or not chartBull)
+            // roll registers into the new HTF candle
+            pH := aH
+            pL := aL
+            aO := open
+            aH := high
+            aL := low
+            aC := close
+            for k = 0 to 3
+                bO.set(k, pspBO.get(k))
+                bC.set(k, pspBC.get(k))
+            rT := htfT
+        else
+            aH := math.max(aH, high)
+            aL := math.min(aL, low)
+            aC := close
+            for k = 0 to 3
+                if not na(pspBC.get(k))
+                    bC.set(k, pspBC.get(k))
+    [bullOut, bearOut]
+
+[pspBull1, pspBear1] = pspScan(htf_1, pspShow and htfOn1)
+[pspBull2, pspBear2] = pspScan(htf_2, pspShow and htfOn2)
+[pspBull3, pspBear3] = pspScan(htf_3, pspShow and htfOn3)
+
+bool pspBullTrig = pspBull1 or pspBull2 or pspBull3
+bool pspBearTrig = pspBear1 or pspBear2 or pspBear3
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ▼▼▼ CONFLUENCE MEMORY ENGINE (PSP + SMT within N bars) ▼▼▼
+// GxT §14: directional registers → window overlap → consumption reset.
+// ═══════════════════════════════════════════════════════════════════════════
+
+bool anyBullSMT = bullSMT or bullSSMT or bullTfSMT
+bool anyBearSMT = bearSMT or bearSSMT or bearTfSMT
+
+var int lastPspBullBar = na
+var int lastPspBearBar = na
+var int lastSmtBullBar = na
+var int lastSmtBearBar = na
+
+if pspBullTrig
+    lastPspBullBar := bar_index
+if pspBearTrig
+    lastPspBearBar := bar_index
+if anyBullSMT
+    lastSmtBullBar := bar_index
+if anyBearSMT
+    lastSmtBearBar := bar_index
+
+// NA-safe window checks
+bool bullPspIn = not na(lastPspBullBar) and (bar_index - lastPspBullBar) <= conf_window
+bool bullSmtIn = not na(lastSmtBullBar) and (bar_index - lastSmtBullBar) <= conf_window
+bool bearPspIn = not na(lastPspBearBar) and (bar_index - lastPspBearBar) <= conf_window
+bool bearSmtIn = not na(lastSmtBearBar) and (bar_index - lastSmtBearBar) <= conf_window
+
+// Fires when EITHER new signal finds the other still inside the window
+bool bullishConf = confOn and ((pspBullTrig and bullSmtIn) or (anyBullSMT and bullPspIn))
+bool bearishConf = confOn and ((pspBearTrig and bearSmtIn) or (anyBearSMT and bearPspIn))
+bool anyConf     = bullishConf or bearishConf
+
+// Consumption reset (anti-spam): one setup = exactly one alert
+if conf_reset and bullishConf
+    lastPspBullBar := na
+    lastSmtBullBar := na
+if conf_reset and bearishConf
+    lastPspBearBar := na
+    lastSmtBearBar := na
+
+plotshape(confMarks and bullishConf, title = "Bullish Confluence", style = shape.diamond, location = location.belowbar, color = C_TEAL, size = size.tiny)
+plotshape(confMarks and bearishConf, title = "Bearish Confluence", style = shape.diamond, location = location.abovebar, color = C_RED, size = size.tiny)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ▼▼▼ DASHBOARD: INFO TABLE ▼▼▼
+// Assets across the top · PDH / PDL taken ✓/✗ down the side
+// Reference data (PDH/PDL) = static [1] → lookahead_on (GxT §2.9 / §9)
+// Table is only redrawn on the last bar (GxT §17.4).
+// ═══════════════════════════════════════════════════════════════════════════
+
+[pdhC, pdlC] = request.security(syminfo.tickerid, "D", [high[1], low[1]], lookahead = barmerge.lookahead_on)
+[pdh1, pdl1] = request.security(settings.psp_sym1, "D", [high[1], low[1]], lookahead = barmerge.lookahead_on)
+[pdh2, pdl2] = request.security(settings.psp_sym2, "D", [high[1], low[1]], lookahead = barmerge.lookahead_on)
+[pdh3, pdl3] = request.security(settings.psp_sym3, "D", [high[1], low[1]], lookahead = barmerge.lookahead_on)
+[pdh4, pdl4] = request.security(settings.psp_sym4, "D", [high[1], low[1]], lookahead = barmerge.lookahead_on)
+
+array<float> pdhA = array.from(pdhC, pdh1, pdh2, pdh3, pdh4)
+array<float> pdlA = array.from(pdlC, pdl1, pdl2, pdl3, pdl4)
+array<float> dayH_src = array.from(high, smtB1h, smtB2h, smtB3h, smtB4h)
+array<float> dayL_src = array.from(low,  smtB1l, smtB2l, smtB3l, smtB4l)
+
+var array<float> dayHi = array.new_float(5, na)
+var array<float> dayLo = array.new_float(5, na)
+bool isNewDay = ta.change(time("D")) != 0
+
+for k = 0 to 4
+    float dh = dayH_src.get(k)
+    float dl = dayL_src.get(k)
+    if isNewDay
+        dayHi.set(k, dh)
+        dayLo.set(k, dl)
+    else
+        if not na(dh)
+            dayHi.set(k, na(dayHi.get(k)) ? dh : math.max(dayHi.get(k), dh))
+        if not na(dl)
+            dayLo.set(k, na(dayLo.get(k)) ? dl : math.min(dayLo.get(k), dl))
+
+// Compact grid: columns = assets (chart asset + each used correlated asset),
+// rows = PDH / PDL taken today (✓ / ✗).
+var table infoTbl = table.new(
+     tblPosIn == 'Top Left' ? position.top_left : tblPosIn == 'Top Center' ? position.top_center : tblPosIn == 'Bottom Right' ? position.bottom_right : tblPosIn == 'Bottom Left' ? position.bottom_left : tblPosIn == 'Bottom Center' ? position.bottom_center : position.top_right,
+     6, 3, bgcolor = color(na), frame_width = 0, border_width = 0)
+
+if barstate.islast and tblShow
+    table.cell(infoTbl, 0, 0, "", text_size = tblSize)
+    table.cell(infoTbl, 0, 1, "PDH", text_color = C_GRAY, text_halign = text.align_left, text_size = tblSize)
+    table.cell(infoTbl, 0, 2, "PDL", text_color = C_GRAY, text_halign = text.align_left, text_size = tblSize)
+    int tCol = 1
+    for k = 0 to 4
+        bool used = k == 0 or smtUse.get(k - 1)
+        if used
+            string nm = k == 0 ? ShortTicker(syminfo.tickerid) : smtNames.get(k - 1)
+            float pdhK = pdhA.get(k)
+            float pdlK = pdlA.get(k)
+            bool tkH = not na(pdhK) and not na(dayHi.get(k)) and dayHi.get(k) >= pdhK
+            bool tkL = not na(pdlK) and not na(dayLo.get(k)) and dayLo.get(k) <= pdlK
+            table.cell(infoTbl, tCol, 0, nm, text_color = C_GRAY, text_halign = text.align_center, text_size = tblSize)
+            table.cell(infoTbl, tCol, 1, tkH ? "✓" : "✗", text_color = tkH ? tblTakenCol : tblNotCol, text_halign = text.align_center, text_size = tblSize)
+            table.cell(infoTbl, tCol, 2, tkL ? "✓" : "✗", text_color = tkL ? tblTakenCol : tblNotCol, text_halign = text.align_center, text_size = tblSize)
+            tCol += 1
+    while tCol <= 5
+        table.cell(infoTbl, tCol, 0, "", text_size = tblSize)
+        table.cell(infoTbl, tCol, 1, "", text_size = tblSize)
+        table.cell(infoTbl, tCol, 2, "", text_size = tblSize)
+        tCol += 1
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ▼▼▼ ALERTS ▼▼▼
+// Order (GxT §14.4): Confluence → Any-signal → Individual (PSP, SMT/SSMT) → CISD → FVG → XC2.
+// In TradingView: Create Alert → Condition = this indicator → pick one below.
+// Notes:
+//  • SMT swing alerts need "Swing SMT" ON. SSMT needs SSMT ON + a TF enabled.
+//  • CISD alerts need "Show CISD" ON.
+//  • Confluence needs "Enable PSP + SMT Confluence" ON and PSP ON.
+//  • Use "Once Per Bar Close" for every alert below (all are bar-close signals).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Confluence (highest value) ──
+alertcondition(anyConf,      title = "⭐ Confluence (Any)",   message = "PSP + SMT confluence on {{ticker}} {{interval}}")
+alertcondition(bullishConf,  title = "⭐ Bullish Confluence", message = "Bullish PSP + SMT confluence on {{ticker}} {{interval}}")
+alertcondition(bearishConf,  title = "⭐ Bearish Confluence", message = "Bearish PSP + SMT confluence on {{ticker}} {{interval}}")
+
+// ── Any-signal ──
+alertcondition(anyBullSMT or pspBullTrig or cisdBullConf or bullFVG or (newXC2 and bull), title = "🔔 Any Bullish Signal", message = "Bullish signal (SMT/SSMT/PSP/CISD/FVG/XC2) on {{ticker}} {{interval}}")
+alertcondition(anyBearSMT or pspBearTrig or cisdBearConf or bearFVG or (newXC2 and bear), title = "🔔 Any Bearish Signal", message = "Bearish signal (SMT/SSMT/PSP/CISD/FVG/XC2) on {{ticker}} {{interval}}")
+
+// ── PSP ──
+alertcondition(pspBullTrig or pspBearTrig, title = "🔔 Any PSP",  message = "PSP on {{ticker}} {{interval}}")
+alertcondition(pspBullTrig,                title = "PSP Bull",   message = "Bullish PSP on {{ticker}} {{interval}}")
+alertcondition(pspBearTrig,                title = "PSP Bear",   message = "Bearish PSP on {{ticker}} {{interval}}")
+
+// ── SMT / SSMT ──
+alertcondition(anyBullSMT, title = "📊 Any SMT/SSMT Bull", message = "Bullish SMT/SSMT on {{ticker}} {{interval}}")
+alertcondition(anyBearSMT, title = "📊 Any SMT/SSMT Bear", message = "Bearish SMT/SSMT on {{ticker}} {{interval}}")
+alertcondition(bullSMT,    title = "SMT Bull (swing)",     message = "Bullish swing SMT on {{ticker}} {{interval}}")
+alertcondition(bearSMT,    title = "SMT Bear (swing)",     message = "Bearish swing SMT on {{ticker}} {{interval}}")
+alertcondition(bullTfSMT,  title = "SMT Bull (timeframes)", message = "Bullish SMT (per timeframe) on {{ticker}} {{interval}}")
+alertcondition(bearTfSMT,  title = "SMT Bear (timeframes)", message = "Bearish SMT (per timeframe) on {{ticker}} {{interval}}")
+alertcondition(bullSSMT,   title = "SSMT Bull (any TF)",   message = "Bullish SSMT on {{ticker}} {{interval}}")
+alertcondition(bearSSMT,   title = "SSMT Bear (any TF)",   message = "Bearish SSMT on {{ticker}} {{interval}}")
+alertcondition(ssBull90,   title = "SSMT Bull 90m",        message = "Bullish SSMT 90m on {{ticker}}")
+alertcondition(ssBear90,   title = "SSMT Bear 90m",        message = "Bearish SSMT 90m on {{ticker}}")
+alertcondition(ssBull4h,   title = "SSMT Bull 4H",         message = "Bullish SSMT 4H on {{ticker}}")
+alertcondition(ssBear4h,   title = "SSMT Bear 4H",         message = "Bearish SSMT 4H on {{ticker}}")
+alertcondition(ssBull6h,   title = "SSMT Bull 6H",         message = "Bullish SSMT 6H on {{ticker}}")
+alertcondition(ssBear6h,   title = "SSMT Bear 6H",         message = "Bearish SSMT 6H on {{ticker}}")
+alertcondition(ssBull7h,   title = "SSMT Bull 7H",         message = "Bullish SSMT 7H on {{ticker}}")
+alertcondition(ssBear7h,   title = "SSMT Bear 7H",         message = "Bearish SSMT 7H on {{ticker}}")
+alertcondition(ssBull1d,   title = "SSMT Bull 1D",         message = "Bullish SSMT 1D on {{ticker}}")
+alertcondition(ssBear1d,   title = "SSMT Bear 1D",         message = "Bearish SSMT 1D on {{ticker}}")
+alertcondition(ssBull1w,   title = "SSMT Bull 1W",         message = "Bullish SSMT 1W on {{ticker}}")
+alertcondition(ssBear1w,   title = "SSMT Bear 1W",         message = "Bearish SSMT 1W on {{ticker}}")
+
+// ── CISD ──
+alertcondition(cisdBullConf, title = "CISD Bull Confirmed", message = "Bullish CISD confirmed on {{ticker}} {{interval}}")
+alertcondition(cisdBearConf, title = "CISD Bear Confirmed", message = "Bearish CISD confirmed on {{ticker}} {{interval}}")
+
+// ── FVG ──
+alertcondition(bullFVG,   title = "Bullish FVG formed", message = "Bullish FVG on {{ticker}}")
+alertcondition(bearFVG,   title = "Bearish FVG formed", message = "Bearish FVG on {{ticker}}")
+alertcondition(fvgMitHit, title = "FVG Mitigated",      message = "FVG mitigated on {{ticker}}")
+
+// ── XC2 ──
+alertcondition(newXC2 and bull, title = "Bullish XC2", message = "Confirmed Bullish XC2 on {{ticker}}")
+alertcondition(newXC2 and bear, title = "Bearish XC2", message = "Confirmed Bearish XC2 on {{ticker}}")
