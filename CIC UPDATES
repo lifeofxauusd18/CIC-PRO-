@@ -36,6 +36,7 @@ string g13 = "13. XC2 ________________"
 string g14 = "14. SESSION OPENS ________________"
 string g15 = "15. REFERENCE STYLE ________________"
 string g16 = "16. SEPARATORS ________________"
+string g17 = "17. ATR / ADR / CDR + PDH / PDL DASHBOARD ________________"
 
 color primBullCol = #00a2c7
 color primBearCol = #db5755
@@ -142,8 +143,11 @@ bool  cisd_fib_n45       = input.bool(true, '-4.5', inline = 'fb3', group = g07)
 int    div_line_width = input.int(1, 'SMT Line Width', minval = 1, maxval = 3, group = g08)
 bool   smt_label_show = input.bool(true, 'Show Ticker Names on SMT Label', group = g08)
 color  smt_text_col   = input.color(#131722, 'SMT Text Color', group = g08)
-int    smt_lbl_size   = input.int(7, 'SMT / SSMT Label Size (px)', minval = 6, maxval = 20, group = g08)
+int    smt_lbl_size   = input.int(7, 'SMT  Label Size (px)', minval = 6, maxval = 20, group = g08)
 // SMT timeframe switches
+bool   smt_en_15m = input.bool(false,'15m' ,inline = 'st1', group = g08)
+bool   smt_en_30m = input.bool(false,'30m' , inline = 'st1', group = g08)
+bool   smt_en_1H = input.bool(false,'1H',  inline = 'st1', group = g08)
 bool   smt_en_90m = input.bool(true, '90m', inline = 'st2', group = g08)
 bool   smt_en_4h  = input.bool(false, '4H',  inline = 'st2', group = g08)
 bool   smt_en_6h  = input.bool(true, '6H',  inline = 'st2', group = g08)
@@ -163,14 +167,17 @@ int    smtMax     = input.int(50, 'Swing: Max SMT Markings', minval = 5, maxval 
 bool   smtSwingOn = input.bool(false, 'Swing SMT (chart timeframe, extra)', group = g08, tooltip = "OFF by default. Marks swing-high/low SMT on the chart timeframe only.")
 
 // ═════════════ 8b. SSMT ═════════════
-bool   ssmtOn = input.bool(true, 'Enable SSMT (2 consecutive closed HTF candles)', group = g08b, tooltip = "Compares the last two CLOSED HTF candles. The chart TF must be lower than the selected SSMT TF.")
+bool   ssmtOn = input.bool(true, 'Enable SSMT (2 consecutive closed HTF candles)', group = g08b, tooltip = "Compares the last two CLOSED HTF candles. The chart TF must be lower than the selected SSMT TF (e.g. 15m SSMT needs a chart of 5m or lower).")
 int    ssmt_line_width = input.int(1, 'SSMT Line Width', minval = 1, maxval = 3, group = g08b)
 bool   ssmt_label_show = input.bool(true, 'Show Ticker Names on SSMT Label', group = g08b)
 color  ssmt_text_col = input.color(#131722, 'SSMT Text Color', group = g08b)
-bool   ssmt_en_90m = input.bool(true, '90m', inline = 'sst2', group = g08b)
+bool   ssmt_en_15m = input.bool(false, '15m', inline = 'sst1', group = g08b)
+bool   ssmt_en_30m = input.bool(false, '30m', inline = 'sst1', group = g08b)
+bool   ssmt_en_1h  = input.bool(false, '1H',  inline = 'sst1', group = g08b)
+bool   ssmt_en_90m = input.bool(true,  '90m', inline = 'sst2', group = g08b)
 bool   ssmt_en_4h  = input.bool(false, '4H',  inline = 'sst2', group = g08b)
-bool   ssmt_en_6h  = input.bool(true, '6H',  inline = 'sst2', group = g08b)
-bool   ssmt_en_7h  = input.bool(true, '7H',  inline = 'sst3', group = g08b)
+bool   ssmt_en_6h  = input.bool(true,  '6H',  inline = 'sst2', group = g08b)
+bool   ssmt_en_7h  = input.bool(true,  '7H',  inline = 'sst3', group = g08b)
 bool   ssmt_en_1d  = input.bool(false, '1D',  inline = 'sst3', group = g08b)
 bool   ssmt_en_1w  = input.bool(false, '1W',  inline = 'sst3', group = g08b)
 int    ssmtTolTicks = input.int(2, 'Equal H/L Tolerance (ticks)', minval = 0, group = g08b)
@@ -267,6 +274,23 @@ bool   sepShowLabel  = input.bool(true, 'Show Timestamp', group = g16)
 color  sepColor      = input.color(color.new(#787b86, 70), 'Line / Text Color', inline = 'sp3', group = g16)
 color  sepTextColor  = input.color(#787b86, '', inline = 'sp3', group = g16)
 int    sepWidth      = input.int(1, 'Line Width', minval = 1, maxval = 5, group = g16)
+
+// ═════════════ 17. DASHBOARD (PDH / PDL taken + Daily Range box) ═════════════
+bool   dbShowPD    = input.bool(true, 'Show PDH / PDL Table', inline = 'dbp', group = g17)
+string dbPdPosIn   = input.string('Top Right', '', options = ['Top Left', 'Top Right', 'Middle Left', 'Middle Right', 'Bottom Left', 'Bottom Right'], inline = 'dbp', group = g17)
+bool   dbShowDR    = input.bool(true, 'Show Daily Range Box', inline = 'dbr', group = g17)
+string dbDrPosIn   = input.string('Bottom Right', '', options = ['Top Left', 'Top Right', 'Middle Left', 'Middle Right', 'Bottom Left', 'Bottom Right'], inline = 'dbr', group = g17)
+string dbSizeIn    = input.string('Small', 'Text Size', options = ['Tiny', 'Small', 'Normal'], group = g17)
+int    adrLength   = input.int(14, 'ADR Length (days)', minval = 1, group = g17)
+bool   dbShowAtr   = input.bool(false, 'Show ATR in Range Box', inline = 'dba', group = g17)
+int    atrLength   = input.int(14, 'ATR Length', minval = 1, inline = 'dba', group = g17)
+color  dbHdrBg     = input.color(#e0e3eb, 'Header Background', inline = 'db1', group = g17)
+color  dbTextCol   = input.color(#131722, 'Text', inline = 'db1', group = g17)
+color  dbTakenCol  = input.color(#2962ff, 'Taken / Not taken', inline = 'db2', group = g17)
+color  dbNotCol    = input.color(#ff6d00, '', inline = 'db2', group = g17)
+color  dbBoxBg     = input.color(#ffffff, 'Range Box Background', inline = 'db3', group = g17)
+color  dbBarFill   = input.color(#ff6d00, 'Bar Colour / Over-Range Colour', inline = 'db4', group = g17, tooltip = 'Bar colour while today\'s range is below the ADR, and the colour used once today\'s range has exceeded the ADR.')
+color  dbOverCol   = input.color(#ef5350, '', inline = 'db4', group = g17)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ▼▼▼ SCRIPT 1: CISD Detection Engine ▼▼▼
@@ -2180,7 +2204,7 @@ if smtEnable and smtSwingOn and getSMTEnabled(timeframe.period) and barstate.isc
 // ▼▼▼ SSMT ENGINE (two consecutive CLOSED HTF candles) ▼▼▼
 // GxT 3.8: LTF accumulator registers (no request.security for the HTF candle),
 //          compared on the boundary bar only.
-// GxT 3.1: 90m+ only (always).
+// GxT 3.1: 15m+ (chart timeframe must be lower than the SSMT timeframe).
 // GxT 3.3: equal highs/lows on correlated assets rejected (per-asset ticks).
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -2218,7 +2242,7 @@ ssmtScan(string tf, string tfTxt, bool enabled) =>
     bool bearOut = false
     int htfT = time(tf)
     int tfSecs = timeframe.in_seconds(tf)
-    bool tfAllowed = tfSecs >= 5400
+    bool tfAllowed = tfSecs >= 900
     bool valid = enabled and tfAllowed and not na(htfT) and tfSecs > timeframe.in_seconds()
 
     if valid
@@ -2313,6 +2337,9 @@ ssmtScan(string tf, string tfTxt, bool enabled) =>
                 label.delete(array.shift(ssmtLabels))
     [bullOut, bearOut]
 
+[ssBull15, ssBear15] = ssmtScan("15",  "15m", ssmtOn and ssmt_en_15m)
+[ssBull30, ssBear30] = ssmtScan("30",  "30m", ssmtOn and ssmt_en_30m)
+[ssBull1h, ssBear1h] = ssmtScan("60",  "1H",  ssmtOn and ssmt_en_1h)
 [ssBull90, ssBear90] = ssmtScan("90",  "90m", ssmtOn and ssmt_en_90m)
 [ssBull4h, ssBear4h] = ssmtScan("240", "4H",  ssmtOn and ssmt_en_4h)
 [ssBull6h, ssBear6h] = ssmtScan("360", "6H",  ssmtOn and ssmt_en_6h)
@@ -2320,8 +2347,8 @@ ssmtScan(string tf, string tfTxt, bool enabled) =>
 [ssBull1d, ssBear1d] = ssmtScan("D",   "1D",  ssmtOn and ssmt_en_1d)
 [ssBull1w, ssBear1w] = ssmtScan("W",   "1W",  ssmtOn and ssmt_en_1w)
 
-bool bullSSMT = ssBull90 or ssBull4h or ssBull6h or ssBull7h or ssBull1d or ssBull1w
-bool bearSSMT = ssBear90 or ssBear4h or ssBear6h or ssBear7h or ssBear1d or ssBear1w
+bool bullSSMT = ssBull15 or ssBull30 or ssBull1h or ssBull90 or ssBull4h or ssBull6h or ssBull7h or ssBull1d or ssBull1w
+bool bearSSMT = ssBear15 or ssBear30 or ssBear1h or ssBear90 or ssBear4h or ssBear6h or ssBear7h or ssBear1d or ssBear1w
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ▼▼▼ FVG ENGINE (30m / 1H / 4H, separate settings per timeframe) ▼▼▼
@@ -2571,6 +2598,101 @@ if barstate.islast
                     line.set_x2(gl, time + fvgExt * fvgBarMs)
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ▼▼▼ DASHBOARD: PDH / PDL "level taken" table + DAILY RANGE box ▼▼▼
+// ADR = average of the last N COMPLETED daily ranges. CDR = today's developing range.
+// Values in price units (not ticks). Taken = today's high/low reached yesterday's high/low.
+// ═══════════════════════════════════════════════════════════════════════════
+
+float atrValue = ta.atr(atrLength)
+
+// Chart asset: previous-day H/L, today's H/L and ADR
+[db0_pdh, db0_pdl, db0_th, db0_tl, adrValue] = request.security(syminfo.tickerid, "D", [high[1], low[1], high, low, ta.sma(high - low, adrLength)[1]], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
+// Correlated assets 1-4
+[db1_pdh, db1_pdl, db1_th, db1_tl] = request.security(settings.psp_sym1, "D", [high[1], low[1], high, low], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
+[db2_pdh, db2_pdl, db2_th, db2_tl] = request.security(settings.psp_sym2, "D", [high[1], low[1], high, low], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
+[db3_pdh, db3_pdl, db3_th, db3_tl] = request.security(settings.psp_sym3, "D", [high[1], low[1], high, low], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
+[db4_pdh, db4_pdl, db4_th, db4_tl] = request.security(settings.psp_sym4, "D", [high[1], low[1], high, low], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
+
+dbPdPos = switch dbPdPosIn
+    'Top Left'     => position.top_left
+    'Middle Left'  => position.middle_left
+    'Middle Right' => position.middle_right
+    'Bottom Left'  => position.bottom_left
+    'Bottom Right' => position.bottom_right
+    => position.top_right
+
+dbDrPos = switch dbDrPosIn
+    'Top Left'     => position.top_left
+    'Top Right'    => position.top_right
+    'Middle Left'  => position.middle_left
+    'Middle Right' => position.middle_right
+    'Bottom Left'  => position.bottom_left
+    => position.bottom_right
+
+dbTxtSize = switch dbSizeIn
+    'Tiny'   => size.tiny
+    'Normal' => size.normal
+    => size.small
+
+const int DB_SEGS = 12
+
+var table dbPdTbl = table.new(dbPdPos, 5, 3, bgcolor = color.new(#ffffff, 100), border_width = 0)
+var table dbDrTbl = table.new(dbDrPos, 2, 4, bgcolor = dbBoxBg, border_color = dbBoxBg, border_width = 1, frame_color = color.new(#787b86, 40), frame_width = 1)
+
+dbFmt(float v) =>
+    na(v) ? "n/a" : str.tostring(v, format.mintick)
+
+if barstate.islast
+    table.clear(dbPdTbl, 0, 0, 4, 2)
+    table.clear(dbDrTbl, 0, 0, 1, 3)
+
+    // ── PDH / PDL taken (columns = correlated assets, rows = PDH / PDL) ──
+    if dbShowPD
+        array<bool>   cUse = array.from(smtUse.get(0), smtUse.get(1), smtUse.get(2), smtUse.get(3))
+        array<string> cNm  = array.from(smtNames.get(0), smtNames.get(1), smtNames.get(2), smtNames.get(3))
+        array<float>  cPdh = array.from(db1_pdh, db2_pdh, db3_pdh, db4_pdh)
+        array<float>  cPdl = array.from(db1_pdl, db2_pdl, db3_pdl, db4_pdl)
+        array<float>  cTh  = array.from(db1_th, db2_th, db3_th, db4_th)
+        array<float>  cTl  = array.from(db1_tl, db2_tl, db3_tl, db4_tl)
+        table.cell(dbPdTbl, 0, 0, "", bgcolor = dbHdrBg, text_size = dbTxtSize)
+        table.cell(dbPdTbl, 0, 1, "PDH", bgcolor = dbHdrBg, text_color = dbTextCol, text_size = dbTxtSize, text_halign = text.align_center)
+        table.cell(dbPdTbl, 0, 2, "PDL", bgcolor = dbHdrBg, text_color = dbTextCol, text_size = dbTxtSize, text_halign = text.align_center)
+        int dbCol = 1
+        for k = 0 to 3
+            if cUse.get(k)
+                bool pdhTaken = not na(cPdh.get(k)) and not na(cTh.get(k)) and cTh.get(k) >= cPdh.get(k)
+                bool pdlTaken = not na(cPdl.get(k)) and not na(cTl.get(k)) and cTl.get(k) <= cPdl.get(k)
+                table.cell(dbPdTbl, dbCol, 0, cNm.get(k), bgcolor = dbHdrBg, text_color = dbTextCol, text_size = dbTxtSize, text_halign = text.align_center)
+                table.cell(dbPdTbl, dbCol, 1, pdhTaken ? "✓" : "✗", text_color = pdhTaken ? dbTakenCol : dbNotCol, text_size = dbTxtSize, text_halign = text.align_center)
+                table.cell(dbPdTbl, dbCol, 2, pdlTaken ? "✓" : "✗", text_color = pdlTaken ? dbTakenCol : dbNotCol, text_size = dbTxtSize, text_halign = text.align_center)
+                dbCol += 1
+
+    // ── DAILY RANGE box ──
+    // CDR  = today's developing high - low (daily bar of the chart symbol)
+    // ADR  = average high-low of the last N COMPLETED daily bars (today excluded)
+    // used = CDR / ADR.   left = ADR - CDR   (once CDR > ADR the box shows "+x over")
+    if dbShowDR
+        float cdrV = db0_th - db0_tl
+        bool rangeOk = not na(adrValue) and adrValue > 0 and not na(cdrV) and cdrV >= 0
+        bool over = rangeOk and cdrV > adrValue
+        float usedPct = rangeOk ? cdrV / adrValue * 100.0 : na
+        int filled = rangeOk ? int(math.max(0, math.min(DB_SEGS, math.round(usedPct / 100.0 * DB_SEGS)))) : 0
+        string barTxt = ""
+        for i = 0 to DB_SEGS - 1
+            barTxt += i < filled ? "█" : "░"
+        color accent = over ? dbOverCol : dbBarFill
+        string leftTxt = not rangeOk ? "n/a" : over ? "+" + dbFmt(cdrV - adrValue) + " over" : dbFmt(adrValue - cdrV) + " left"
+        table.cell(dbDrTbl, 0, 0, "DAILY RANGE", text_color = color.new(#787b86, 0), text_size = size.tiny, text_halign = text.align_left)
+        table.cell(dbDrTbl, 1, 0, "", text_size = size.tiny)
+        table.cell(dbDrTbl, 0, 1, barTxt, text_color = accent, text_size = size.tiny, text_halign = text.align_left)
+        table.cell(dbDrTbl, 1, 1, rangeOk ? str.tostring(math.round(usedPct)) + "%" : "n/a", text_color = accent, text_size = size.tiny, text_halign = text.align_right)
+        table.cell(dbDrTbl, 0, 2, dbFmt(cdrV) + " / " + dbFmt(adrValue) + " · " + leftTxt, text_color = dbTextCol, text_size = size.tiny, text_halign = text.align_left)
+        table.cell(dbDrTbl, 1, 2, "", text_size = size.tiny)
+        if dbShowAtr
+            table.cell(dbDrTbl, 0, 3, "ATR (" + str.tostring(atrLength) + "): " + dbFmt(atrValue), text_color = dbTextCol, text_size = size.tiny, text_halign = text.align_left)
+            table.cell(dbDrTbl, 1, 3, "", text_size = size.tiny)
+
+// ═══════════════════════════════════════════════════════════════════════════
 // ▼▼▼ ALERTS ▼▼▼
 // Order: Any-signal → SMT / SSMT → CISD → FVG → XC2.
 // In TradingView: Create Alert → Condition = this indicator → pick one below.
@@ -2594,6 +2716,12 @@ alertcondition(bullSMT,    title = "SMT Bull (swing)",     message = "Bullish sw
 alertcondition(bearSMT,    title = "SMT Bear (swing)",     message = "Bearish swing SMT on {{ticker}} {{interval}}")
 alertcondition(bullSSMT,   title = "SSMT Bull (any TF)",   message = "Bullish SSMT on {{ticker}} {{interval}}")
 alertcondition(bearSSMT,   title = "SSMT Bear (any TF)",   message = "Bearish SSMT on {{ticker}} {{interval}}")
+alertcondition(ssBull15,   title = "SSMT Bull 15m",        message = "Bullish SSMT 15m on {{ticker}}")
+alertcondition(ssBear15,   title = "SSMT Bear 15m",        message = "Bearish SSMT 15m on {{ticker}}")
+alertcondition(ssBull30,   title = "SSMT Bull 30m",        message = "Bullish SSMT 30m on {{ticker}}")
+alertcondition(ssBear30,   title = "SSMT Bear 30m",        message = "Bearish SSMT 30m on {{ticker}}")
+alertcondition(ssBull1h,   title = "SSMT Bull 1H",         message = "Bullish SSMT 1H on {{ticker}}")
+alertcondition(ssBear1h,   title = "SSMT Bear 1H",         message = "Bearish SSMT 1H on {{ticker}}")
 alertcondition(ssBull90,   title = "SSMT Bull 90m",        message = "Bullish SSMT 90m on {{ticker}}")
 alertcondition(ssBear90,   title = "SSMT Bear 90m",        message = "Bearish SSMT 90m on {{ticker}}")
 alertcondition(ssBull4h,   title = "SSMT Bull 4H",         message = "Bullish SSMT 4H on {{ticker}}")
