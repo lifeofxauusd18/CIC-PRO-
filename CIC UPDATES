@@ -91,7 +91,7 @@ bool  pspShow        = input.bool(true, 'Enable PSP?', inline = 'ft3', group = g
 color in_pspUp       = input.color(#00ADEF, '', inline = 'ft3', group = g04)
 color in_pspDown     = input.color(#DB5755, '', inline = 'ft3', group = g04)
 bool  smtHTFLines    = input.bool(true, 'HTF SMT', group = g04, tooltip = "SMT lines inside the HTF candle panel")
-bool  smtChartLines  = input.bool(true, 'Chart SMT', group = g04, tooltip = "Draws SMT lines on the main chart. Bearish text above the line, bullish text below the line. Supports all enabled SMT timeframes.")
+bool  smtChartLines  = input.bool(true, 'Chart SMT', group = g04, tooltip = "Draws SMT lines on the main chart (independent of the HTF panels). Bearish text above the line, bullish text below the line. Supports all enabled SMT timeframes.")
 
 // ═════════════ 5. CANDLE STYLE ═════════════
 color  in_bullBody   = input.color(color.new(#ffffff, 10), 'Body', inline = 'cs1', group = g05)
@@ -150,7 +150,8 @@ bool  cisd_fib_n45       = input.bool(true, '-4.5', inline = 'fb3', group = g07)
 // ═════════════ 8. SMT ═════════════
 // Lines are always solid grey; label = timeframe on line 1, pair name(s) on line 2.
 int    div_line_width = input.int(1, 'SMT Line Width', minval = 1, maxval = 3, group = g08)
-bool   smt_label_show = input.bool(true, 'Show Ticker Names on SMT Label', group = g08)
+// Pair names are removed from SMT labels (timeframe only).
+bool   smt_label_show = false
 color  smt_text_col   = input.color(#131722, 'SMT Text Color', group = g08)
 int    smt_lbl_size   = input.int(7, 'SMT  Label Size (px)', minval = 6, maxval = 20, group = g08)
 // SMT timeframe switches
@@ -178,7 +179,8 @@ bool   smtSwingOn = input.bool(false, 'Swing SMT (chart timeframe, extra)', grou
 // ═════════════ 8b. SSMT ═════════════
 bool   ssmtOn = input.bool(true, 'Enable SSMT (2 consecutive closed HTF candles)', group = g08b, tooltip = "Compares the last two CLOSED HTF candles. The chart TF must be lower than the selected SSMT TF (e.g. 15m SSMT needs a chart of 5m or lower).")
 int    ssmt_line_width = input.int(1, 'SSMT Line Width', minval = 1, maxval = 3, group = g08b)
-bool   ssmt_label_show = input.bool(true, 'Show Ticker Names on SSMT Label', group = g08b)
+// Pair names are removed from SSMT labels (timeframe only).
+bool   ssmt_label_show = false
 color  ssmt_text_col = input.color(#131722, 'SSMT Text Color', group = g08b)
 bool   ssmt_en_15m = input.bool(false, '15m', inline = 'sst1', group = g08b)
 bool   ssmt_en_30m = input.bool(false, '30m', inline = 'sst1', group = g08b)
@@ -1018,7 +1020,10 @@ settings.sep_width := 1
 
 settings.enableSMT    := smtEnable
 settings.showHTFSMT   := smtHTFLines
-settings.showChartSMT := smtChartLines
+// FIX: chart SMT is now drawn by the independent smtHtfScan() engine below,
+// so the HTF panels must NOT draw chart SMT (avoids duplicates and the
+// dependency on having a matching panel turned on).
+settings.showChartSMT := false
 settings.psp_show     := pspShow
 
 settings.psp_sym1_use := in_use1
@@ -1261,8 +1266,8 @@ f_exactPeak(int startIdx, int endIdx, bool wantHigh, int fbIdx, float fbPx) =>
     [bestIdx, bestPx]
 
 // HTF-panel sweeps + SMT, plus compact chart SMT labels for enabled HTF slots.
-// Chart SMT label: timeframe on line 1, pair name(s) on line 2.
-//   BEARISH = above the line, BULLISH = below the line.
+// (Chart SMT from panels is now disabled via settings.showChartSMT := false;
+//  the independent smtHtfScan() engine handles chart SMT instead.)
 method DrawSweepAndSMT(CandleSet candleSet) =>
     if (barstate.isrealtime or barstate.islast) and candleSet.candles.size() >= 2
         bool tfEnabled = getSMTEnabled(candleSet.settings.htf)
@@ -1431,6 +1436,8 @@ method Monitor(CandleSet candleSet) =>
             line.delete(delCandle.wick_down)
     candleSet
 
+// NOTE: positioning (Reorder) is no longer done here. It is done in f_panelPlace()
+// so panels can be ordered by timeframe instead of by slot number.
 method Update(CandleSet candleSet, int offset) =>
     if candleSet.candles.size() > 0
         Candle candle = candleSet.candles.first()
@@ -1475,15 +1482,39 @@ method Update(CandleSet candleSet, int offset) =>
             line.set_y2(candle.wick_up, math.max(candle.o, candle.c))
             line.set_y1(candle.wick_down, candle.l)
             line.set_y2(candle.wick_down, math.min(candle.o, candle.c))
-        if barstate.isrealtime or barstate.islast
-            candleSet.Reorder(offset)
     candleSet
 
-// Runs one panel; returns its pixel width (in bars) so the layout can stack panels.
-f_panel(CandleSet s, int offset) =>
+// Phase 1: update data only (no positioning)
+f_panelRun(CandleSet s, int offset) =>
     s.UpdateTime(offset)
-    s.Monitor().Update(offset).FindImbalance()
-    s.candles.size() * settings.width + (s.candles.size() > 0 ? (s.candles.size() - 1) * settings.buffer : 0)
+    s.Monitor().Update(offset)
+    true
+
+// Phase 2: position the panel, then build its imbalances
+f_panelPlace(CandleSet s, int offset) =>
+    if barstate.isrealtime or barstate.islast
+        if s.candles.size() > 0
+            s.Reorder(offset)
+    s.FindImbalance()
+    true
+
+// Sort key = timeframe length in seconds (slot index only breaks ties); na = panel not shown
+f_panelKey(CandleSet s, int slot) =>
+    s.settings.show and ValidTimeframe(s.settings.htf) ? timeframe.in_seconds(s.settings.htf) + slot * 0.001 : na
+
+f_panelWidth(CandleSet s) =>
+    int n = s.candles.size()
+    n > 0 ? n * settings.width + (n - 1) * settings.buffer : 0
+
+// Offset of panel `i` = padding + width of every shown panel with a shorter timeframe
+f_panelOffset(int i, array<float> keys, array<int> ws) =>
+    int off = settings.offset
+    float mk = keys.get(i)
+    for j = 0 to 5
+        float kj = keys.get(j)
+        if not na(kj) and kj < mk
+            off += ws.get(j) + settings.htf_buffer
+    off
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUTO CORRELATED PAIRS (follows the chart asset)
@@ -1560,7 +1591,7 @@ settings.psp_sym3_use := settings.psp_sym3_use and not SameInstrument(settings.p
 settings.psp_sym4_use := settings.psp_sym4_use and not SameInstrument(settings.psp_sym4)
 
 // ── Correlated-asset chart-timeframe feed (also supplies tick sizes) ──
-// One request per asset (high, low, open, close, mintick). Used by swing SMT, SSMT and by the
+// One request per asset (high, low, open, close, mintick). Used by swing SMT, SSMT, chart SMT and by the
 // HTF4-HTF6 panels, which build their candles from chart bars to stay under the 40-request limit.
 [smtB1h, smtB1l, smtB1o, smtB1c, smtMt1] = request.security(settings.psp_sym1, timeframe.period, [high, low, open, close, syminfo.mintick], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
 [smtB2h, smtB2l, smtB2o, smtB2c, smtMt2] = request.security(settings.psp_sym2, timeframe.period, [high, low, open, close, syminfo.mintick], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
@@ -1736,8 +1767,31 @@ htf3.settings.own_h := own_h_3
 htf3.settings.own_l := own_l_3
 htf3.settings.own_c := own_c_3
 
-// ── Panel layout (6 panels, stacked left to right) ──
-int offset = settings.offset
+// ── Panel layout: sorted by timeframe (shortest on the left), regardless of HTF slot number ──
+float pk1 = f_panelKey(htf1, 0)
+float pk2 = f_panelKey(htf2, 1)
+float pk3 = f_panelKey(htf3, 2)
+float pk4 = f_panelKey(htf4, 3)
+float pk5 = f_panelKey(htf5, 4)
+float pk6 = f_panelKey(htf6, 5)
+
+// phase 1: update every shown panel's data
+if not na(pk1)
+    f_panelRun(htf1, 0)
+if not na(pk2)
+    f_panelRun(htf2, 0)
+if not na(pk3)
+    f_panelRun(htf3, 0)
+if not na(pk4)
+    f_panelRun(htf4, 0)
+if not na(pk5)
+    f_panelRun(htf5, 0)
+if not na(pk6)
+    f_panelRun(htf6, 0)
+
+array<float> pKeys = array.from(pk1, pk2, pk3, pk4, pk5, pk6)
+array<int>   pW    = array.from(f_panelWidth(htf1), f_panelWidth(htf2), f_panelWidth(htf3), f_panelWidth(htf4), f_panelWidth(htf5), f_panelWidth(htf6))
+
 float htf1_end = na
 float htf2_end = na
 float htf3_end = na
@@ -1745,30 +1799,31 @@ float htf4_end = na
 float htf5_end = na
 float htf6_end = na
 
-if htf1.settings.show and ValidTimeframe(htf1.settings.htf)
-    int w1 = f_panel(htf1, offset)
-    htf1_end := offset + w1
-    offset += w1 + settings.htf_buffer
-if htf2.settings.show and ValidTimeframe(htf2.settings.htf)
-    int w2 = f_panel(htf2, offset)
-    htf2_end := offset + w2
-    offset += w2 + settings.htf_buffer
-if htf3.settings.show and ValidTimeframe(htf3.settings.htf)
-    int w3 = f_panel(htf3, offset)
-    htf3_end := offset + w3
-    offset += w3 + settings.htf_buffer
-if htf4.settings.show and ValidTimeframe(htf4.settings.htf)
-    int w4 = f_panel(htf4, offset)
-    htf4_end := offset + w4
-    offset += w4 + settings.htf_buffer
-if htf5.settings.show and ValidTimeframe(htf5.settings.htf)
-    int w5 = f_panel(htf5, offset)
-    htf5_end := offset + w5
-    offset += w5 + settings.htf_buffer
-if htf6.settings.show and ValidTimeframe(htf6.settings.htf)
-    int w6 = f_panel(htf6, offset)
-    htf6_end := offset + w6
-    offset += w6 + settings.htf_buffer
+// phase 2: place each panel at its sorted offset
+if not na(pk1)
+    int o1 = f_panelOffset(0, pKeys, pW)
+    f_panelPlace(htf1, o1)
+    htf1_end := o1 + pW.get(0)
+if not na(pk2)
+    int o2 = f_panelOffset(1, pKeys, pW)
+    f_panelPlace(htf2, o2)
+    htf2_end := o2 + pW.get(1)
+if not na(pk3)
+    int o3 = f_panelOffset(2, pKeys, pW)
+    f_panelPlace(htf3, o3)
+    htf3_end := o3 + pW.get(2)
+if not na(pk4)
+    int o4 = f_panelOffset(3, pKeys, pW)
+    f_panelPlace(htf4, o4)
+    htf4_end := o4 + pW.get(3)
+if not na(pk5)
+    int o5 = f_panelOffset(4, pKeys, pW)
+    f_panelPlace(htf5, o5)
+    htf5_end := o5 + pW.get(4)
+if not na(pk6)
+    int o6 = f_panelOffset(5, pKeys, pW)
+    f_panelPlace(htf6, o6)
+    htf6_end := o6 + pW.get(5)
 
 if barstate.islast
     while array.size(chartSmtLines) > 0
@@ -1801,18 +1856,17 @@ if settings.show_sep
             yHi := na(yHi) ? hh : math.max(yHi, hh)
             yLo := na(yLo) ? ll : math.min(yLo, ll)
     array<float> ends = array.from(htf1_end, htf2_end, htf3_end, htf4_end, htf5_end, htf6_end)
-    int nAct = 0
+    float maxEnd = na
     for i = 0 to 5
-        if not na(ends.get(i))
-            nAct += 1
-    int seen = 0
+        float e0 = ends.get(i)
+        if not na(e0)
+            maxEnd := na(maxEnd) ? e0 : math.max(maxEnd, e0)
     for i = 0 to 5
         float e = ends.get(i)
-        if not na(e)
-            seen += 1
-            if seen < nAct and not na(yHi)
-                int gapX = int(bar_index + e + math.round(settings.htf_buffer / 2))
-                separators.push(line.new(gapX, yHi, gapX, yLo, xloc = xloc.bar_index, color = settings.sep_color, style = LineStyle(settings.sep_style), width = settings.sep_width))
+        // separator after every panel except the rightmost one
+        if not na(e) and e < maxEnd and not na(yHi)
+            int gapX = int(bar_index + e + math.round(settings.htf_buffer / 2))
+            separators.push(line.new(gapX, yHi, gapX, yLo, xloc = xloc.bar_index, color = settings.sep_color, style = LineStyle(settings.sep_style), width = settings.sep_width))
 
 var float allHigh = na
 var float allLow = na
@@ -2460,6 +2514,172 @@ ssmtScan(string tf, string tfTxt, bool enabled) =>
 
 bool bullSSMT = ssBull15 or ssBull30 or ssBull1h or ssBull90 or ssBull4h or ssBull6h or ssBull7h or ssBull1d or ssBull1w
 bool bearSSMT = ssBear15 or ssBear30 or ssBear1h or ssBear90 or ssBear4h or ssBear6h or ssBear7h or ssBear1d or ssBear1w
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ▼▼▼ CHART SMT ENGINE (independent of HTF panels) ▼▼▼
+// One scanner per SMT timeframe ticked in section 8. Compares the FORMING HTF
+// candle against the last closed one (live, like the panels), using the SMT
+// settings (tolerance, min assets, inverse toggles, colours, label size).
+// The chart timeframe must be lower than the SMT timeframe.
+// ═══════════════════════════════════════════════════════════════════════════
+
+var array<line>  smtHtfLines  = array.new_line()
+var array<label> smtHtfLabels = array.new_label()
+
+smtHtfScan(string tf, string tfTxt, bool enabled) =>
+    // C = last CLOSED HTF candle, R = the candle that is forming right now.
+    // SMT is checked LIVE: forming candle (R) vs last closed candle (C), exactly like the panels did.
+    var float aCH = na
+    var float aCL = na
+    var int   aCHb = na
+    var int   aCLb = na
+    var float aRH = na
+    var float aRL = na
+    var int   aRHb = na
+    var int   aRLb = na
+    var int   rT = na
+    var array<float> bCH = array.new_float(4, na)
+    var array<float> bCL = array.new_float(4, na)
+    var array<float> bRH = array.new_float(4, na)
+    var array<float> bRL = array.new_float(4, na)
+    var line  lnHi = na
+    var label lbHi = na
+    var line  lnLo = na
+    var label lbLo = na
+
+    int htfT = time(tf)
+    bool valid = enabled and not na(htfT) and timeframe.in_seconds(tf) > timeframe.in_seconds()
+    float tolA = smtTolTicks * syminfo.mintick
+
+    if valid
+        bool isNew = na(rT) or htfT != rT
+        if isNew
+            // finalize whatever was marked on the candle that just closed
+            if not na(lnHi)
+                array.push(smtHtfLines, lnHi)
+                array.push(smtHtfLabels, lbHi)
+            if not na(lnLo)
+                array.push(smtHtfLines, lnLo)
+                array.push(smtHtfLabels, lbLo)
+            lnHi := na
+            lbHi := na
+            lnLo := na
+            lbLo := na
+            aCH := aRH
+            aCL := aRL
+            aCHb := aRHb
+            aCLb := aRLb
+            for k = 0 to 3
+                bCH.set(k, bRH.get(k))
+                bCL.set(k, bRL.get(k))
+                bRH.set(k, ssmtBH.get(k))
+                bRL.set(k, ssmtBL.get(k))
+            aRH := high
+            aRL := low
+            aRHb := bar_index
+            aRLb := bar_index
+            rT := htfT
+        else
+            if high > aRH
+                aRH := high
+                aRHb := bar_index
+            if low < aRL
+                aRL := low
+                aRLb := bar_index
+            for k = 0 to 3
+                float bh = ssmtBH.get(k)
+                float bl = ssmtBL.get(k)
+                if not na(bh)
+                    bRH.set(k, na(bRH.get(k)) ? bh : math.max(bRH.get(k), bh))
+                if not na(bl)
+                    bRL.set(k, na(bRL.get(k)) ? bl : math.min(bRL.get(k), bl))
+
+        if not na(aCH) and not na(aCL) and not na(aRH) and not na(aRL)
+            // ── BEARISH: chart HH vs correlated HH disagree (same rule as the HTF panels) ──
+            int cnt = 0
+            string nm = ""
+            bool chartHH = aRH > aCH
+            for k = 0 to 3
+                float bc = bRH.get(k)
+                float bp = bCH.get(k)
+                if smtUse.get(k) and not na(bc) and not na(bp)
+                    float tolK = smtTolA.get(k)
+                    bool made = bc > bp
+                    bool eq   = math.abs(bc - bp) <= tolK
+                    bool dv   = false
+                    if not (smtRejectEqual and eq)
+                        dv := smtInvA.get(k) ? (chartHH == made) : (chartHH != made)
+                    if dv
+                        cnt += 1
+                        nm += (nm == "" ? "" : " ") + smtNames.get(k)
+            if cnt >= smtMinAssets
+                string txt = tfTxt + (smt_label_show ? "\n" + nm : "")
+                int mx = int(math.round((aCHb + aRHb) / 2))
+                float my = (aCH + aRH) / 2
+                if na(lnHi)
+                    lnHi := line.new(aCHb, aCH, aRHb, aRH, color = smtBearCol, style = line.style_solid, width = div_line_width)
+                    lbHi := label.new(mx, my, txt, yloc = yloc.price, style = label.style_label_down, color = color_transparent, textcolor = smt_text_col, size = smt_lbl_size)
+                else
+                    line.set_xy1(lnHi, aCHb, aCH)
+                    line.set_xy2(lnHi, aRHb, aRH)
+                    label.set_xy(lbHi, mx, my)
+                    label.set_text(lbHi, txt)
+            else if not na(lnHi)
+                line.delete(lnHi)
+                label.delete(lbHi)
+                lnHi := na
+                lbHi := na
+
+            // ── BULLISH: chart LL vs correlated LL disagree (same rule as the HTF panels) ──
+            int cntL = 0
+            string nmL = ""
+            bool chartLL = aRL < aCL
+            for k = 0 to 3
+                float bcL = bRL.get(k)
+                float bpL = bCL.get(k)
+                if smtUse.get(k) and not na(bcL) and not na(bpL)
+                    float tolKL = smtTolA.get(k)
+                    bool madeL = bcL < bpL
+                    bool eqL   = math.abs(bcL - bpL) <= tolKL
+                    bool dvL   = false
+                    if not (smtRejectEqual and eqL)
+                        dvL := smtInvA.get(k) ? (chartLL == madeL) : (chartLL != madeL)
+                    if dvL
+                        cntL += 1
+                        nmL += (nmL == "" ? "" : " ") + smtNames.get(k)
+            if cntL >= smtMinAssets
+                string txtL = tfTxt + (smt_label_show ? "\n" + nmL : "")
+                int mxL = int(math.round((aCLb + aRLb) / 2))
+                float myL = (aCL + aRL) / 2
+                if na(lnLo)
+                    lnLo := line.new(aCLb, aCL, aRLb, aRL, color = smtBullCol, style = line.style_solid, width = div_line_width)
+                    lbLo := label.new(mxL, myL, txtL, yloc = yloc.price, style = label.style_label_up, color = color_transparent, textcolor = smt_text_col, size = smt_lbl_size)
+                else
+                    line.set_xy1(lnLo, aCLb, aCL)
+                    line.set_xy2(lnLo, aRLb, aRL)
+                    label.set_xy(lbLo, mxL, myL)
+                    label.set_text(lbLo, txtL)
+            else if not na(lnLo)
+                line.delete(lnLo)
+                label.delete(lbLo)
+                lnLo := na
+                lbLo := na
+
+            while array.size(smtHtfLines) > smtMax
+                line.delete(array.shift(smtHtfLines))
+                label.delete(array.shift(smtHtfLabels))
+    true
+
+bool smtChartOn = smtEnable and smtChartLines
+smtHtfScan("15",  "15m", smtChartOn and smt_en_15m)
+smtHtfScan("30",  "30m", smtChartOn and smt_en_30m)
+smtHtfScan("60",  "1H",  smtChartOn and smt_en_1H)
+smtHtfScan("90",  "90m", smtChartOn and smt_en_90m)
+smtHtfScan("240", "4H",  smtChartOn and smt_en_4h)
+smtHtfScan("360", "6H",  smtChartOn and smt_en_6h)
+smtHtfScan("420", "7H",  smtChartOn and smt_en_7h)
+smtHtfScan("D",   "1D",  smtChartOn and smt_en_1d)
+smtHtfScan("W",   "1W",  smtChartOn and smt_en_1w)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ▼▼▼ FVG ENGINE (30m / 1H / 4H, separate settings per timeframe) ▼▼▼
