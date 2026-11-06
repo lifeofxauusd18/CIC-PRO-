@@ -10,7 +10,7 @@ indicator("PO3",
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SETTINGS PANEL
-//  1 Correlated Assets   2 Direction        3 HTF Candles      4 Features
+//  1 Correlated Assets   2 Direction        3 HTF Candles (6 panels)   4 Features
 //  5 Candle Style        6 CISD             7 Fib Projections  8 SMT / SSMT
 //  9 Fair Value Gaps (9a 30m, 9b 1H, 9c 4H)
 // 10 HTF Imbalances
@@ -70,6 +70,15 @@ int    htfCnt2 = input.int(5, '', minval = 1, maxval = 10, inline = 'hs2', group
 bool   htfOn3 = input.bool(true, 'HTF3', inline = 'hs3', group = g03)
 string htfTf3 = input.string('4H', '', options = ['15m','30m','1H','90m','4H','6H','7H','1D','1W'], inline = 'hs3', group = g03)
 int    htfCnt3 = input.int(5, '', minval = 1, maxval = 10, inline = 'hs3', group = g03)
+bool   htfOn4 = input.bool(false, 'HTF4', inline = 'hs4', group = g03)
+string htfTf4 = input.string('30m', '', options = ['15m','30m','1H','90m','4H','6H','7H','1D','1W'], inline = 'hs4', group = g03)
+int    htfCnt4 = input.int(5, '', minval = 1, maxval = 10, inline = 'hs4', group = g03)
+bool   htfOn5 = input.bool(false, 'HTF5', inline = 'hs5', group = g03)
+string htfTf5 = input.string('6H', '', options = ['15m','30m','1H','90m','4H','6H','7H','1D','1W'], inline = 'hs5', group = g03)
+int    htfCnt5 = input.int(5, '', minval = 1, maxval = 10, inline = 'hs5', group = g03)
+bool   htfOn6 = input.bool(false, 'HTF6', inline = 'hs6', group = g03)
+string htfTf6 = input.string('1D', '', options = ['15m','30m','1H','90m','4H','6H','7H','1D','1W'], inline = 'hs6', group = g03)
+int    htfCnt6 = input.int(5, '', minval = 1, maxval = 10, inline = 'hs6', group = g03)
 int in_offset    = input.int(50, 'Padding from chart', minval = 1, group = g03)
 int in_width     = input.int(2, 'Candle width', minval = 1, maxval = 4, group = g03)
 int in_buffer    = input.int(1, 'Space between candles', minval = 1, maxval = 4, group = g03)
@@ -915,6 +924,34 @@ htf3.settings := SettingsHTF3
 htf3.candles := candles_3
 htf3.imbalances := imbalances_3
 
+// ── HTF4 / HTF5 / HTF6 ──
+var CandleSettings SettingsHTF4 = CandleSettings.new()
+var CandleSettings SettingsHTF5 = CandleSettings.new()
+var CandleSettings SettingsHTF6 = CandleSettings.new()
+var array<Candle> candles_4 = array.new<Candle>(0)
+var array<Candle> candles_5 = array.new<Candle>(0)
+var array<Candle> candles_6 = array.new<Candle>(0)
+var array<Imbalance> imbalances_4 = array.new<Imbalance>()
+var array<Imbalance> imbalances_5 = array.new<Imbalance>()
+var array<Imbalance> imbalances_6 = array.new<Imbalance>()
+
+var CandleSet htf4 = CandleSet.new()
+htf4.settings := SettingsHTF4
+htf4.candles := candles_4
+htf4.imbalances := imbalances_4
+
+var CandleSet htf5 = CandleSet.new()
+htf5.settings := SettingsHTF5
+htf5.candles := candles_5
+htf5.imbalances := imbalances_5
+
+var CandleSet htf6 = CandleSet.new()
+htf6.settings := SettingsHTF6
+htf6.candles := candles_6
+htf6.imbalances := imbalances_6
+
+var array<CandleSet> allSets = array.from(htf1, htf2, htf3, htf4, htf5, htf6)
+
 f_tfMap(string s) =>
     switch s
         '15m' => '15'
@@ -931,9 +968,15 @@ f_tfMap(string s) =>
 string htf_1 = f_tfMap(htfTf1)
 string htf_2 = f_tfMap(htfTf2)
 string htf_3 = f_tfMap(htfTf3)
+string htf_4 = f_tfMap(htfTf4)
+string htf_5 = f_tfMap(htfTf5)
+string htf_6 = f_tfMap(htfTf6)
 htf1.settings.show := htfOn1
 htf2.settings.show := htfOn2
 htf3.settings.show := htfOn3
+htf4.settings.show := htfOn4
+htf5.settings.show := htfOn5
+htf6.settings.show := htfOn6
 
 // HTF look
 settings.bull_body     := in_bullBody
@@ -1045,10 +1088,13 @@ PSPColor(bool bull, int candleTime, float c1, float o1, int t1, float c2, float 
     color bodyCol = bull ? settings.psp_up_body : settings.psp_down_body
     [isPSP, bodyCol]
 
-// SMT timeframe enable: all nine user-selected timeframes.
+// SMT timeframe enable: ALL nine timeframes (15m / 30m / 1H were missing before).
 getSMTEnabled(string tf) =>
     int s = timeframe.in_seconds(tf)
     switch s
+        900     => smt_en_15m
+        1800    => smt_en_30m
+        3600    => smt_en_1H
         5400    => smt_en_90m
         14400   => smt_en_4h
         21600   => smt_en_6h
@@ -1058,9 +1104,6 @@ getSMTEnabled(string tf) =>
         => false
 
 // Methods
-method HTFEnabled(CandleSet htf1, CandleSet htf2, CandleSet htf3) =>
-    (htf1.settings.show ? 1 : 0) + (htf2.settings.show ? 1 : 0) + (htf3.settings.show ? 1 : 0)
-
 method CandleSetHigh(array<Candle> candles, float h) =>
     _h = h
     if array.size(candles) > 0
@@ -1079,18 +1122,12 @@ method CandleSetLow(array<Candle> candles, float l) =>
                 _l := c.l
     _l
 
-method CandlesHigh(CandleSet htf1, CandleSet htf2, CandleSet htf3, array<Candle> candles) =>
-    h = 0.0
-    int cnt = 0
-    int last = htf1.HTFEnabled(htf2, htf3)
-    if htf1.settings.show and ValidTimeframe(htf1.settings.htf)
-        h := htf1.candles.CandleSetHigh(h)
-        cnt += 1
-    if htf2.settings.show and ValidTimeframe(htf2.settings.htf) and cnt < last
-        h := htf2.candles.CandleSetHigh(h)
-        cnt += 1
-    if htf3.settings.show and ValidTimeframe(htf3.settings.htf) and cnt < last
-        h := htf3.candles.CandleSetHigh(h)
+// Highest / lowest across ALL enabled panels (used for 'Align' label mode)
+f_allHigh(array<Candle> candles) =>
+    float h = 0.0
+    for s in allSets
+        if s.settings.show and ValidTimeframe(s.settings.htf)
+            h := s.candles.CandleSetHigh(h)
     if array.size(candles) > 0
         for i = 0 to array.size(candles) - 1
             Candle c = array.get(candles, i)
@@ -1098,18 +1135,11 @@ method CandlesHigh(CandleSet htf1, CandleSet htf2, CandleSet htf3, array<Candle>
                 h := c.h
     h
 
-method CandlesLow(CandleSet htf1, CandleSet htf2, CandleSet htf3, array<Candle> candles, float h) =>
-    l = h
-    int cnt = 0
-    int last = htf1.HTFEnabled(htf2, htf3)
-    if htf1.settings.show and ValidTimeframe(htf1.settings.htf)
-        l := htf1.candles.CandleSetLow(l)
-        cnt += 1
-    if htf2.settings.show and ValidTimeframe(htf2.settings.htf) and cnt < last
-        l := htf2.candles.CandleSetLow(l)
-        cnt += 1
-    if htf3.settings.show and ValidTimeframe(htf3.settings.htf) and cnt < last
-        l := htf3.candles.CandleSetLow(l)
+f_allLow(array<Candle> candles, float startVal) =>
+    float l = startVal
+    for s in allSets
+        if s.settings.show and ValidTimeframe(s.settings.htf)
+            l := s.candles.CandleSetLow(l)
     if array.size(candles) > 0
         for i = 0 to array.size(candles) - 1
             Candle c = array.get(candles, i)
@@ -1141,8 +1171,8 @@ method Reorder(CandleSet candleSet, int offset) =>
     top = 0.0
     bottom = 0.0
     if settings.label_alignment == 'Align'
-        top := htf1.CandlesHigh(htf2, htf3, candleSet.candles)
-        bottom := htf1.CandlesLow(htf2, htf3, candleSet.candles, top)
+        top := f_allHigh(candleSet.candles)
+        bottom := f_allLow(candleSet.candles, top)
     if settings.label_alignment == 'Follow Candles'
         top := candleSet.candles.CandleSetHigh(0)
         bottom := candleSet.candles.CandleSetLow(top)
@@ -1449,6 +1479,12 @@ method Update(CandleSet candleSet, int offset) =>
             candleSet.Reorder(offset)
     candleSet
 
+// Runs one panel; returns its pixel width (in bars) so the layout can stack panels.
+f_panel(CandleSet s, int offset) =>
+    s.UpdateTime(offset)
+    s.Monitor().Update(offset).FindImbalance()
+    s.candles.size() * settings.width + (s.candles.size() > 0 ? (s.candles.size() - 1) * settings.buffer : 0)
+
 // ═══════════════════════════════════════════════════════════════════════════
 // AUTO CORRELATED PAIRS (follows the chart asset)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1523,13 +1559,90 @@ settings.psp_sym2_use := settings.psp_sym2_use and not SameInstrument(settings.p
 settings.psp_sym3_use := settings.psp_sym3_use and not SameInstrument(settings.psp_sym3)
 settings.psp_sym4_use := settings.psp_sym4_use and not SameInstrument(settings.psp_sym4)
 
+// ── Correlated-asset chart-timeframe feed (also supplies tick sizes) ──
+// One request per asset (high, low, open, close, mintick). Used by swing SMT, SSMT and by the
+// HTF4-HTF6 panels, which build their candles from chart bars to stay under the 40-request limit.
+[smtB1h, smtB1l, smtB1o, smtB1c, smtMt1] = request.security(settings.psp_sym1, timeframe.period, [high, low, open, close, syminfo.mintick], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+[smtB2h, smtB2l, smtB2o, smtB2c, smtMt2] = request.security(settings.psp_sym2, timeframe.period, [high, low, open, close, syminfo.mintick], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+[smtB3h, smtB3l, smtB3o, smtB3c, smtMt3] = request.security(settings.psp_sym3, timeframe.period, [high, low, open, close, syminfo.mintick], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+[smtB4h, smtB4l, smtB4o, smtB4c, smtMt4] = request.security(settings.psp_sym4, timeframe.period, [high, low, open, close, syminfo.mintick], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+
+// Accumulates one HTF candle (open / close / high / low / candle open time) from chart-timeframe values.
+f_htfOHLC(string tf, float o_, float c_, float h_, float l_) =>
+    var float ro = na
+    var float rc = na
+    var float rh = na
+    var float rl = na
+    var int   rt = na
+    int t = time(tf)
+    if not na(t)
+        if na(rt) or t != rt
+            ro := o_
+            rh := h_
+            rl := l_
+            rt := t
+        else
+            if na(ro)
+                ro := o_
+            if not na(h_)
+                rh := na(rh) ? h_ : math.max(rh, h_)
+            if not na(l_)
+                rl := na(rl) ? l_ : math.min(rl, l_)
+        if not na(c_)
+            rc := c_
+    [ro, rc, rh, rl, na(ro) ? int(na) : rt]
+
+f_loadHtfData(CandleSet s, string tf) =>
+    [oO, oC, oH, oL, oT] = f_htfOHLC(tf, open, close, high, low)
+    s.settings.own_o := oO
+    s.settings.own_c := oC
+    s.settings.own_h := oH
+    s.settings.own_l := oL
+    [a1o, a1c, a1h, a1l, a1t] = f_htfOHLC(tf, smtB1o, smtB1c, smtB1h, smtB1l)
+    s.settings.sym1_o := a1o
+    s.settings.sym1_c := a1c
+    s.settings.sym1_h := a1h
+    s.settings.sym1_l := a1l
+    s.settings.sym1_t := a1t
+    [a2o, a2c, a2h, a2l, a2t] = f_htfOHLC(tf, smtB2o, smtB2c, smtB2h, smtB2l)
+    s.settings.sym2_o := a2o
+    s.settings.sym2_c := a2c
+    s.settings.sym2_h := a2h
+    s.settings.sym2_l := a2l
+    s.settings.sym2_t := a2t
+    [a3o, a3c, a3h, a3l, a3t] = f_htfOHLC(tf, smtB3o, smtB3c, smtB3h, smtB3l)
+    s.settings.sym3_o := a3o
+    s.settings.sym3_c := a3c
+    s.settings.sym3_h := a3h
+    s.settings.sym3_l := a3l
+    s.settings.sym3_t := a3t
+    [a4o, a4c, a4h, a4l, a4t] = f_htfOHLC(tf, smtB4o, smtB4c, smtB4h, smtB4l)
+    s.settings.sym4_o := a4o
+    s.settings.sym4_c := a4c
+    s.settings.sym4_h := a4h
+    s.settings.sym4_l := a4l
+    s.settings.sym4_t := a4t
+    true
+
 htf1.settings.htf := htf_1
 htf2.settings.htf := htf_2
 htf3.settings.htf := htf_3
+htf4.settings.htf := htf_4
+htf5.settings.htf := htf_5
+htf6.settings.htf := htf_6
 htf1.settings.max_display := htfCnt1
 htf2.settings.max_display := htfCnt2
 htf3.settings.max_display := htfCnt3
+htf4.settings.max_display := htfCnt4
+htf5.settings.max_display := htfCnt5
+htf6.settings.max_display := htfCnt6
 
+// HTF4-6 data (built from chart bars)
+f_loadHtfData(htf4, htf_4)
+f_loadHtfData(htf5, htf_5)
+f_loadHtfData(htf6, htf_6)
+
+// HTF1-3 data (request.security)
 string effectiveHtf1 = timeframe.in_seconds(htf1.settings.htf) > timeframe.in_seconds() ? htf1.settings.htf : timeframe.period
 [sym1_o_1, sym1_c_1, sym1_h_1, sym1_l_1, sym1_t_1] = request.security(settings.psp_sym1, effectiveHtf1, [open, close, high, low, time], lookahead = barmerge.lookahead_on)
 [sym2_o_1, sym2_c_1, sym2_h_1, sym2_l_1, sym2_t_1] = request.security(settings.psp_sym2, effectiveHtf1, [open, close, high, low, time], lookahead = barmerge.lookahead_on)
@@ -1623,27 +1736,39 @@ htf3.settings.own_h := own_h_3
 htf3.settings.own_l := own_l_3
 htf3.settings.own_c := own_c_3
 
-int cnt = 0
-int last = htf1.HTFEnabled(htf2, htf3)
+// ── Panel layout (6 panels, stacked left to right) ──
 int offset = settings.offset
 float htf1_end = na
 float htf2_end = na
 float htf3_end = na
+float htf4_end = na
+float htf5_end = na
+float htf6_end = na
+
 if htf1.settings.show and ValidTimeframe(htf1.settings.htf)
-    htf1.UpdateTime(offset)
-    htf1.Monitor().Update(offset).FindImbalance()
-    cnt += 1
-    htf1_end := offset + htf1.candles.size() * settings.width + (htf1.candles.size() > 0 ? (htf1.candles.size() - 1) * settings.buffer : 0)
-    offset := offset + (cnt > 0 ? htf1.candles.size() * settings.width + (htf1.candles.size() > 0 ? (htf1.candles.size() - 1) * settings.buffer : 0) + settings.htf_buffer : 0)
-if htf2.settings.show and ValidTimeframe(htf2.settings.htf) and cnt < last
-    htf2.UpdateTime(offset)
-    htf2.Monitor().Update(offset).FindImbalance()
-    cnt += 1
-    htf2_end := offset + htf2.candles.size() * settings.width + (htf2.candles.size() > 0 ? (htf2.candles.size() - 1) * settings.buffer : 0)
-    offset := offset + (cnt > 0 ? htf2.candles.size() * settings.width + (htf2.candles.size() > 0 ? (htf2.candles.size() - 1) * settings.buffer : 0) + settings.htf_buffer : 0)
-if htf3.settings.show and ValidTimeframe(htf3.settings.htf) and cnt < last
-    htf3.Monitor().Update(offset).FindImbalance()
-    htf3_end := offset + htf3.candles.size() * settings.width + (htf3.candles.size() > 0 ? (htf3.candles.size() - 1) * settings.buffer : 0)
+    int w1 = f_panel(htf1, offset)
+    htf1_end := offset + w1
+    offset += w1 + settings.htf_buffer
+if htf2.settings.show and ValidTimeframe(htf2.settings.htf)
+    int w2 = f_panel(htf2, offset)
+    htf2_end := offset + w2
+    offset += w2 + settings.htf_buffer
+if htf3.settings.show and ValidTimeframe(htf3.settings.htf)
+    int w3 = f_panel(htf3, offset)
+    htf3_end := offset + w3
+    offset += w3 + settings.htf_buffer
+if htf4.settings.show and ValidTimeframe(htf4.settings.htf)
+    int w4 = f_panel(htf4, offset)
+    htf4_end := offset + w4
+    offset += w4 + settings.htf_buffer
+if htf5.settings.show and ValidTimeframe(htf5.settings.htf)
+    int w5 = f_panel(htf5, offset)
+    htf5_end := offset + w5
+    offset += w5 + settings.htf_buffer
+if htf6.settings.show and ValidTimeframe(htf6.settings.htf)
+    int w6 = f_panel(htf6, offset)
+    htf6_end := offset + w6
+    offset += w6 + settings.htf_buffer
 
 if barstate.islast
     while array.size(chartSmtLines) > 0
@@ -1653,58 +1778,52 @@ if barstate.islast
 
 if htf1.settings.show and ValidTimeframe(htf1.settings.htf)
     htf1.DrawSweepAndSMT()
-
 if htf2.settings.show and ValidTimeframe(htf2.settings.htf)
     htf2.DrawSweepAndSMT()
-
 if htf3.settings.show and ValidTimeframe(htf3.settings.htf)
     htf3.DrawSweepAndSMT()
+if htf4.settings.show and ValidTimeframe(htf4.settings.htf)
+    htf4.DrawSweepAndSMT()
+if htf5.settings.show and ValidTimeframe(htf5.settings.htf)
+    htf5.DrawSweepAndSMT()
+if htf6.settings.show and ValidTimeframe(htf6.settings.htf)
+    htf6.DrawSweepAndSMT()
 
 if settings.show_sep
     while separators.size() > 0
         line.delete(separators.shift())
-    float candleYHi = 0.0
-    float candleYLo = 999999999.0
-    if htf1.settings.show and htf1.candles.size() > 0
-        candleYHii = htf1.candles.CandleSetHigh(candleYHi)
-        candleYHi := candleYHii
-        candleYLo := math.min(candleYLo, htf1.candles.CandleSetLow(candleYHi))
-    if htf2.settings.show and htf2.candles.size() > 0
-        candleYHii = htf2.candles.CandleSetHigh(candleYHi)
-        candleYHi := candleYHii
-        candleYLo := math.min(candleYLo, htf2.candles.CandleSetLow(candleYHi))
-    if htf3.settings.show and htf3.candles.size() > 0
-        candleYHii = htf3.candles.CandleSetHigh(candleYHi)
-        candleYHi := candleYHii
-        candleYLo := math.min(candleYLo, htf3.candles.CandleSetLow(candleYHi))
-    bool hasCandles = candleYHi > 0
-    if hasCandles and htf1.settings.show and not na(htf1_end)
-        int gapX = int(bar_index + htf1_end + math.round(settings.htf_buffer / 2))
-        if htf2.settings.show and not na(htf2_end) or htf3.settings.show and not na(htf3_end)
-            separators.push(line.new(gapX, candleYHi, gapX, candleYLo, xloc = xloc.bar_index, color = settings.sep_color, style = LineStyle(settings.sep_style), width = settings.sep_width))
-    if hasCandles and htf2.settings.show and not na(htf2_end) and htf3.settings.show and not na(htf3_end)
-        int gapX2 = int(bar_index + htf2_end + math.round(settings.htf_buffer / 2))
-        separators.push(line.new(gapX2, candleYHi, gapX2, candleYLo, xloc = xloc.bar_index, color = settings.sep_color, style = LineStyle(settings.sep_style), width = settings.sep_width))
+    float yHi = na
+    float yLo = na
+    for s in allSets
+        if s.settings.show and s.candles.size() > 0
+            float hh = s.candles.CandleSetHigh(0.0)
+            float ll = s.candles.CandleSetLow(hh)
+            yHi := na(yHi) ? hh : math.max(yHi, hh)
+            yLo := na(yLo) ? ll : math.min(yLo, ll)
+    array<float> ends = array.from(htf1_end, htf2_end, htf3_end, htf4_end, htf5_end, htf6_end)
+    int nAct = 0
+    for i = 0 to 5
+        if not na(ends.get(i))
+            nAct += 1
+    int seen = 0
+    for i = 0 to 5
+        float e = ends.get(i)
+        if not na(e)
+            seen += 1
+            if seen < nAct and not na(yHi)
+                int gapX = int(bar_index + e + math.round(settings.htf_buffer / 2))
+                separators.push(line.new(gapX, yHi, gapX, yLo, xloc = xloc.bar_index, color = settings.sep_color, style = LineStyle(settings.sep_style), width = settings.sep_width))
 
 var float allHigh = na
 var float allLow = na
 allHigh := na
 allLow := na
-if htf1.candles.size() > 0
-    for i = 0 to htf1.candles.size() - 1
-        Candle c1 = htf1.candles.get(i)
-        allHigh := na(allHigh) ? c1.h : math.max(allHigh, c1.h)
-        allLow := na(allLow) ? c1.l : math.min(allLow, c1.l)
-if htf2.candles.size() > 0
-    for i = 0 to htf2.candles.size() - 1
-        Candle c2 = htf2.candles.get(i)
-        allHigh := na(allHigh) ? c2.h : math.max(allHigh, c2.h)
-        allLow := na(allLow) ? c2.l : math.min(allLow, c2.l)
-if htf3.candles.size() > 0
-    for i = 0 to htf3.candles.size() - 1
-        Candle c3 = htf3.candles.get(i)
-        allHigh := na(allHigh) ? c3.h : math.max(allHigh, c3.h)
-        allLow := na(allLow) ? c3.l : math.min(allLow, c3.l)
+for s in allSets
+    if s.candles.size() > 0
+        for i = 0 to s.candles.size() - 1
+            Candle cx = s.candles.get(i)
+            allHigh := na(allHigh) ? cx.h : math.max(allHigh, cx.h)
+            allLow := na(allLow) ? cx.l : math.min(allLow, cx.l)
 
 plot(allHigh, title = '(internal) HTF scale anchor high', color = color.new(color.white, 100), display = display.pane)
 plot(allLow, title = '(internal) HTF scale anchor low', color = color.new(color.white, 100), display = display.pane)
@@ -2096,16 +2215,8 @@ trimLevels(tenLines, tenLabels, keepDaily)
 
 float smtTol = smtTolTicks * syminfo.mintick
 
-[smtB1h, smtB1l] = request.security(settings.psp_sym1, timeframe.period, [high, low], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
-[smtB2h, smtB2l] = request.security(settings.psp_sym2, timeframe.period, [high, low], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
-[smtB3h, smtB3l] = request.security(settings.psp_sym3, timeframe.period, [high, low], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
-[smtB4h, smtB4l] = request.security(settings.psp_sym4, timeframe.period, [high, low], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
-
+// (smtB1h.. and smtMt1.. are now fetched earlier, in the correlated-asset feed block)
 // Each correlated asset has its own tick size, so the tolerance is built per asset.
-float smtMt1 = request.security(settings.psp_sym1, timeframe.period, syminfo.mintick, lookahead = barmerge.lookahead_off)
-float smtMt2 = request.security(settings.psp_sym2, timeframe.period, syminfo.mintick, lookahead = barmerge.lookahead_off)
-float smtMt3 = request.security(settings.psp_sym3, timeframe.period, syminfo.mintick, lookahead = barmerge.lookahead_off)
-float smtMt4 = request.security(settings.psp_sym4, timeframe.period, syminfo.mintick, lookahead = barmerge.lookahead_off)
 array<float> smtTolA  = array.from(nz(smtMt1, syminfo.mintick) * smtTolTicks, nz(smtMt2, syminfo.mintick) * smtTolTicks, nz(smtMt3, syminfo.mintick) * smtTolTicks, nz(smtMt4, syminfo.mintick) * smtTolTicks)
 array<float> ssmtTolA = array.from(nz(smtMt1, syminfo.mintick) * ssmtTolTicks, nz(smtMt2, syminfo.mintick) * ssmtTolTicks, nz(smtMt3, syminfo.mintick) * ssmtTolTicks, nz(smtMt4, syminfo.mintick) * ssmtTolTicks)
 
