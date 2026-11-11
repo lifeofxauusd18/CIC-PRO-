@@ -1,66 +1,84 @@
+
 //@version=6
-indicator("SMT Divergences", shorttitle="SMT", overlay=true, max_lines_count=500, max_labels_count=500, max_bars_back=5000)
+indicator("GXV SMT Module", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500, max_bars_back=5000)
+import Gregorius_XV/GXVAssetCorrelationUtils/1 as AC
+import Gregorius_XV/GXVUtils/12 as QTU
 
-// Standalone SMT module extracted from BUBBLY (original GXV SMT Divergences-Lite by Gregorius_XV, MPL-2.0).
-// No library imports. Auto pairs removed: pairs are manual only.
-
-//==============================================================================
-// Time declarations
-//==============================================================================
+//##############################################################################
+// 1. HOST SHIM  (skip if your script already defines these)
+//##############################################################################
 tf = timeframe.period
 tf_sec = timeframe.in_seconds(tf)
+TF_SEC_60 = timeframe.in_seconds("60")
 
-//==============================================================================
-// Inputs
-//==============================================================================
+gHTF = "2. HTF Settings ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 g_smt = "SMT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 g_smt_gates = "SMT Gates Settings"
 g_smt_ranks = "SMT Render Settings"
+g_smt_styling = "SMT Syling Settings"
 gHTFSMT = "HTF SMTs"
-g_smt_styling = "SMT Styling Settings"
-g_smt_assets = "SMT Asset Pair Settings"
+g_smt_assets = "SMT Asset Pair Resolver Settings"
 
+htf_auto = input.bool(true, 'Auto HTF', inline = 'autohtf', group = gHTF)
+htf_sequence_mode = input.string('GXT Sequence', 'Sequence Mode', options = ['Classic Sequence', 'GXT Sequence'], group = gHTF)
+effective_sequence_mode = htf_sequence_mode
+htf_custom_daily_open = input.bool(false, 'Custom Daily Open        ', inline = 'customdaily', group = gHTF)
+htf_custom_daily_time = input.string('Midnight', '', options = ['Midnight', '18:00'], inline = 'customdaily', group = gHTF)
+
+// Bias filter stub: standalone = every SMT direction visible.
+// In your host, keep your own f_bias_ssmt (bias engine / profiler_bias_state).
+f_bias_ssmt(int _dir) =>
+    true
+
+//##############################################################################
+// ▼▼ SMT MODULE — START (copy from here)
+//##############################################################################
+
+//==============================================================================
+// 2. SMT INPUTS
+//==============================================================================
 const string TIP_DYNAMIC_SMT_LABELS = "When enabled, hides SMT labels on the exact chart timeframe used as that SMT family's maximum calculation gate. 3M and 12M labels are excluded."
 const string TIP_CLEANUP = "Controls conflict handling. All removes lower-priority conflicts; Bypass modes keep conflicts but fade the bypassed SMT; None disables cleanup."
+const string TIP_DISPLAY_CAP = "Maximum retained SMTs per timeframe, pair, and direction bucket."
 const string TIP_NEARBY_ONLY = "Shows only SMTs whose endpoint is within the latest chart bars."
 const string TIP_AESTHETIC_BYPASS = "In Bypass cleanup modes, keeps conflicting SMTs visible with lower contrast instead of fully removing them."
 const string TIP_BYPASS_LABELS = "Shows labels on faded bypassed SMTs. Turn off for cleaner charts."
 
-smt_txt_all = input.color(#4a4a4a, "SMT Text", group=g_smt)
+smt_txt_all = input.color(#4a4a4a, "SMT Text", inline="smt_txt", group=g_smt)
 smt_label_size = input.string(size.tiny, "SMT Labels Size", options=[size.tiny, size.small, size.normal, size.large, size.huge], group=g_smt)
 smt_labels_show = input.bool(true, "SMT Labels?", group=g_smt)
 smt_dynamic_labels = input.bool(true, "Dynamic SMT Labels?", group=g_smt, tooltip=TIP_DYNAMIC_SMT_LABELS)
-smt_status_show = input.bool(true, "Pair Status Table?", group=g_smt)
 
-smt_render_nearby_only = input.bool(false, "Render Gate?  ", group=g_smt_gates, tooltip=TIP_NEARBY_ONLY, inline="renderbars")
-smt_nearby_bars = input.int(400, " ", minval=1, maxval=5000, group=g_smt_gates, inline="renderbars")
+smt_render_nearby_only = input.bool(false, "Render Gate?  ", group=g_smt_gates, tooltip=TIP_NEARBY_ONLY, inline='renderbars')
+smt_nearby_bars = input.int(400, " ", minval=1, maxval=5000, group=g_smt_gates, active=smt_render_nearby_only, inline='renderbars')
 smt_history_limit = input.int(20, "Display Cap", minval=1, maxval=100, group=g_smt_gates)
 smt_monthly_min_tf = input.string("1 Hour", "Monthly SMTs TF ≥.", options=["None", "1 Hour", "4 Hour", "1 Day"], group=g_smt_gates)
-smt_render_current_day_only = input.bool(false, "Render Only Current Day Range    ", group=g_smt_gates)
 
-smt_15m_show = input.bool(false, "15m", inline="smt_r1", group=g_smt_ranks)
-smt_15m_clr = input.color(#dbdbdb, "", inline="smt_r1", group=g_smt_ranks)
-smt_30m_show = input.bool(true, "30m", inline="smt_r1", group=g_smt_ranks)
-smt_30m_clr = input.color(#dbdbdb, "", inline="smt_r1", group=g_smt_ranks)
-smt_1h_show = input.bool(true, "1H ", inline="smt_r1", group=g_smt_ranks)
-smt_1h_clr = input.color(#dbdbdb, "", inline="smt_r1", group=g_smt_ranks)
-smt_90m_show = input.bool(true, "90m", inline="smt_r2", group=g_smt_ranks)
-smt_90m_clr = input.color(#dbdbdb, "", inline="smt_r2", group=g_smt_ranks)
-smt_4h_show = input.bool(true, "4H ", inline="smt_r2", group=g_smt_ranks)
-smt_4h_clr = input.color(#dbdbdb, "", inline="smt_r2", group=g_smt_ranks)
-smt_6h_show = input.bool(true, "6H ", inline="smt_r2", group=g_smt_ranks)
-smt_6h_clr = input.color(#dbdbdb, "", inline="smt_r2", group=g_smt_ranks)
-smt_7h_show = input.bool(true, "7H ", inline="smt_r3", group=g_smt_ranks)
-smt_7h_clr = input.color(#dbdbdb, "", inline="smt_r3", group=g_smt_ranks)
-smt_12h_show = input.bool(true, "12H", inline="smt_r3", group=g_smt_ranks)
-smt_12h_clr = input.color(#dbdbdb, "", inline="smt_r3", group=g_smt_ranks)
-smt_1d_show = input.bool(true, "1D ", inline="smt_r3", group=g_smt_ranks)
+smt_auto = input.bool(false, "Auto SMT?", group = g_smt_ranks, active = htf_auto, tooltip = "Requires Auto HTF. Intraday families follow the active Classic or GXT ladder; both ladders stay warm during Auto Sequence.")
+smt_auto_effective = htf_auto and smt_auto
+smt_15m_show = input.bool(false, "15m", inline="smt_r1", group=g_smt_ranks, active=not smt_auto_effective)
+smt_15m_clr = input.color(#dbdbdb, "", inline="smt_r1", group=g_smt_ranks, active=not smt_auto_effective)
+smt_30m_show = input.bool(true, "30m", inline="smt_r1", group=g_smt_ranks, active=not smt_auto_effective)
+smt_30m_clr = input.color(#dbdbdb, "", inline="smt_r1", group=g_smt_ranks, active=not smt_auto_effective)
+smt_1h_show = input.bool(true, "1H ", inline="smt_r1", group=g_smt_ranks, active=not smt_auto_effective)
+smt_1h_clr = input.color(#dbdbdb, "", inline="smt_r1", group=g_smt_ranks, active=not smt_auto_effective)
+smt_90m_show = input.bool(true, "90m", inline="smt_r2", group=g_smt_ranks, active=not smt_auto_effective)
+smt_90m_clr = input.color(#dbdbdb, "", inline="smt_r2", group=g_smt_ranks, active=not smt_auto_effective)
+smt_4h_show = input.bool(true, "4H ", inline="smt_r2", group=g_smt_ranks, active=not smt_auto_effective)
+smt_4h_clr = input.color(#dbdbdb, "", inline="smt_r2", group=g_smt_ranks, active=not smt_auto_effective)
+smt_6h_show = input.bool(true, "6H ", inline="smt_r2", group=g_smt_ranks, active=not smt_auto_effective)
+smt_6h_clr = input.color(#dbdbdb, "", inline="smt_r2", group=g_smt_ranks, active=not smt_auto_effective)
+smt_7h_show = input.bool(true, "7H ", inline="smt_r3", group=g_smt_ranks, active=not smt_auto_effective)
+smt_7h_clr = input.color(#dbdbdb, "", inline="smt_r3", group=g_smt_ranks, active=not smt_auto_effective)
+smt_12h_show = input.bool(true, "12H", inline="smt_r3", group=g_smt_ranks, active=not smt_auto_effective)
+smt_12h_clr = input.color(#dbdbdb, "", inline="smt_r3", group=g_smt_ranks, active=not smt_auto_effective)
+smt_1d_show = input.bool(true, "1D ", inline="smt_r3", group=g_smt_ranks)
 smt_1d_clr = input.color(#b8b8b8, "", inline="smt_r3", group=g_smt_ranks)
-smt_1w_show = input.bool(true, "1W ", inline="smt_r4", group=gHTFSMT)
+smt_1w_show = input.bool(true, "1W ", inline="smt_r4", group=gHTFSMT)
 smt_1w_clr = input.color(#b8b8b8, "", inline="smt_r4", group=gHTFSMT)
-smt_1m_show = input.bool(false, "1M ", inline="smt_r4", group=gHTFSMT)
+smt_1m_show = input.bool(false, "1M ", inline="smt_r4", group=gHTFSMT)
 smt_1m_clr = input.color(#9c9c9c, "", inline="smt_r4", group=gHTFSMT)
-smt_3m_show = input.bool(false, "3M ", inline="smt_r5", group=gHTFSMT)
+smt_3m_show = input.bool(false, "3M ", inline="smt_r5", group=gHTFSMT)
 smt_3m_clr = input.color(#636363, "", inline="smt_r5", group=gHTFSMT)
 smt_12m_show = input.bool(false, "12M", inline="smt_r5", group=gHTFSMT)
 smt_12m_clr = input.color(#2e2e2e, "", inline="smt_r5", group=gHTFSMT)
@@ -68,29 +86,27 @@ smt_12m_clr = input.color(#2e2e2e, "", inline="smt_r5", group=gHTFSMT)
 smt_line_style_input = input.string("___", "SMT Line Style", options=["___", "----", "...."], group=g_smt_styling)
 smt_line_style = smt_line_style_input == "----" ? line.style_dashed : smt_line_style_input == "...." ? line.style_dotted : line.style_solid
 smt_cleanup_mode = input.string("All", "SMT Cleanup", options=["All", "Bypass Pivot A", "Bypass Pivot B", "Bypass Inside Range", "None"], group=g_smt_styling, tooltip=TIP_CLEANUP)
-smt_aesthetic_bypass = input.bool(true, "Aesthetic Bypass?", inline="smt_bypass", group=g_smt_styling, tooltip=TIP_AESTHETIC_BYPASS)
-smt_bypass_labels_show = input.bool(false, "Bypass Labels?", inline="smt_bypass", group=g_smt_styling, tooltip=TIP_BYPASS_LABELS)
+smt_aesthetic_bypass = input.bool(true, "Aesthetic Bypass?", inline="smt_bypass", group=g_smt_styling, active=smt_cleanup_mode == "Bypass Pivot A" or smt_cleanup_mode == "Bypass Pivot B" or smt_cleanup_mode == "Bypass Inside Range", tooltip=TIP_AESTHETIC_BYPASS)
+smt_bypass_labels_show = input.bool(false, "Bypass Labels?", inline="smt_bypass", group=g_smt_styling, active=smt_aesthetic_bypass and (smt_cleanup_mode == "Bypass Pivot A" or smt_cleanup_mode == "Bypass Pivot B" or smt_cleanup_mode == "Bypass Inside Range"), tooltip=TIP_BYPASS_LABELS)
 smt_cleanup_pivot_a = smt_cleanup_mode != "Bypass Pivot A" and smt_cleanup_mode != "None"
 smt_cleanup_pivot_b = smt_cleanup_mode != "Bypass Pivot B" and smt_cleanup_mode != "None"
 smt_cleanup_inside = smt_cleanup_mode != "Bypass Inside Range" and smt_cleanup_mode != "None"
-
-manualCorrelation = true
-manualPair1On = input.bool(true, "Pair 1", inline="PAIR1", group=g_smt_assets)
-manualPair1 = input.symbol("", "", inline="PAIR1", group=g_smt_assets)
-manualPair1Inverse = input.bool(false, "Inverse", inline="PAIR1", group=g_smt_assets)
-manualPair2On = input.bool(true, "Pair 2", inline="PAIR2", group=g_smt_assets)
-manualPair2 = input.symbol("", "", inline="PAIR2", group=g_smt_assets)
-manualPair2Inverse = input.bool(false, "Inverse", inline="PAIR2", group=g_smt_assets)
-manualPair3On = input.bool(false, "Pair 3", inline="PAIR3", group=g_smt_assets)
-manualPair3 = input.symbol("", "", inline="PAIR3", group=g_smt_assets)
-manualPair3Inverse = input.bool(false, "Inverse", inline="PAIR3", group=g_smt_assets)
-
-// No bias engine in the standalone build: every direction is always visible.
-f_bias_ssmt(int _dir) =>
-    true
+smt_render_current_day_only = input.bool(false, "Render Only Current Day Range    ", group=g_smt_gates)
+smt_correlation_mode = input.string("Classic", "Correlation Mode", options=["GXT", "Classic", "Manual"], group=g_smt_assets)
+smt_correlation_type = input.string("Triad", "Correlation Type", options=["Dyad", "Triad", "Tetrad"], group=g_smt_assets, active=smt_correlation_mode != "Manual")
+manualCorrelation = smt_correlation_mode == "Manual"
+manualPair1On = input.bool(true, 'Pair 1', inline='PAIR1', group=g_smt_assets, active=manualCorrelation)
+manualPair1 = input.symbol('', '', inline='PAIR1', group=g_smt_assets, active=manualCorrelation and manualPair1On)
+manualPair1Inverse = input.bool(false, 'Inverse', inline='PAIR1', group=g_smt_assets, active=manualCorrelation and manualPair1On)
+manualPair2On = input.bool(true, 'Pair 2', inline='PAIR2', group=g_smt_assets, active=manualCorrelation)
+manualPair2 = input.symbol('', '', inline='PAIR2', group=g_smt_assets, active=manualCorrelation and manualPair2On)
+manualPair2Inverse = input.bool(false, 'Inverse', inline='PAIR2', group=g_smt_assets, active=manualCorrelation and manualPair2On)
+manualPair3On = input.bool(false, 'Pair 3', inline='PAIR3', group=g_smt_assets, active=manualCorrelation)
+manualPair3 = input.symbol('', '', inline='PAIR3', group=g_smt_assets, active=manualCorrelation and manualPair3On)
+manualPair3Inverse = input.bool(false, 'Inverse', inline='PAIR3', group=g_smt_assets, active=manualCorrelation and manualPair3On)
 
 //==============================================================================
-// Session / timezone helpers
+// 3. SMT TIME / SESSION / GATE HELPERS
 //==============================================================================
 f_is_mid_prefix(string px) =>
     px == "CAPITALCOM" or px == "CMCMARKETS"
@@ -104,10 +120,105 @@ f_is_utc_prefix(string px) =>
 f_oracle_tz(string px) =>
     f_is_chicago_prefix(px) ? "America/Chicago" : f_is_mid_prefix(px) ? "Etc/GMT+5" : f_is_utc_prefix(px) ? "UTC" : "America/New_York"
 
+f_oracle_day_start_hour(string px) =>
+    f_is_chicago_prefix(px) or f_is_mid_prefix(px) ? 17 : f_is_utc_prefix(px) ? 22 : 18
+
+f_days_since_sunday(int dow) =>
+    dow == dayofweek.sunday ? 0 : dow == dayofweek.monday ? 1 : dow == dayofweek.tuesday ? 2 : dow == dayofweek.wednesday ? 3 : dow == dayofweek.thursday ? 4 : dow == dayofweek.friday ? 5 : 6
+
+f_smt_anchor_range_key(int barTime, int anchorTime, int rangeMinutes) =>
+    int rangeMs = rangeMinutes * 60 * 1000
+    int bucket = int(math.floor((barTime - anchorTime) / rangeMs))
+    anchorTime + bucket * rangeMs
+
+f_smt_daily_range_key(int dayStartTime) =>
+    dayStartTime
+
+f_smt_iso_week_year(int refTime, string tz) =>
+    int wy = year(refTime, tz)
+    int wm = month(refTime, tz)
+    int cw = weekofyear(refTime, tz)
+    if wm == 12 and cw == 1
+        wy := wy + 1
+    else if wm == 1 and cw >= 52
+        wy := wy - 1
+    wy
+
+f_smt_iso_week_range_key(int dayStartTime, int oneDayMs, string tz) =>
+    int refTime = dayStartTime + oneDayMs
+    int wy = f_smt_iso_week_year(refTime, tz)
+    int cw = weekofyear(refTime, tz)
+    wy * 100 + cw
+
+f_smt_month_range_key(int dayStartTime, string tz) =>
+    year(dayStartTime, tz) * 100 + month(dayStartTime, tz)
+
+f_smt_month_of_quarter_slot(int dayStartTime, string tz) =>
+    int cm = month(dayStartTime, tz)
+    int qsM = int(math.floor((cm - 1) / 3)) * 3 + 1
+    cm - qsM
+
+f_smt_month_of_quarter_range_key(int dayStartTime, string tz) =>
+    int cy = year(dayStartTime, tz)
+    int cm = month(dayStartTime, tz)
+    int q = int(math.floor((cm - 1) / 3)) + 1
+    int slot = f_smt_month_of_quarter_slot(dayStartTime, tz)
+    cy * 100 + q * 10 + slot
+
+f_smt_quarter_subrange_slot(int barTime, int dayStartTime, string tz, int startHour) =>
+    int cy = year(dayStartTime, tz)
+    int cm = month(dayStartTime, tz)
+    int qsM = int(math.floor((cm - 1) / 3)) * 3 + 1
+    int qsT = timestamp(tz, cy, qsM, 1, startHour, 0)
+    int qeT = qsM == 10 ? timestamp(tz, cy + 1, 1, 1, startHour, 0) : timestamp(tz, cy, qsM + 3, 1, startHour, 0)
+    int q = int(math.floor((barTime - qsT) * 4.0 / math.max(1, qeT - qsT)))
+    math.max(0, math.min(3, q))
+
+f_smt_quarter_subrange_key(int barTime, int dayStartTime, string tz, int startHour) =>
+    int cy = year(dayStartTime, tz)
+    int cm = month(dayStartTime, tz)
+    int quarter = int(math.floor((cm - 1) / 3)) + 1
+    int slot = f_smt_quarter_subrange_slot(barTime, dayStartTime, tz, startHour)
+    cy * 100 + quarter * 10 + slot
+
+f_smt_four_year_phase(int y) =>
+    y % 4 == 3 ? 0 : y % 4 == 0 ? 1 : y % 4 == 1 ? 2 : 3
+
+f_smt_four_year_range_key(int barTime, string tz) =>
+    int y = year(barTime, tz)
+    int block = int(math.floor(y / 4))
+    block * 10 + f_smt_four_year_phase(y)
+
+f_smt_local_day_start(int barTime, string tz, int startHour) =>
+    int localYear = year(barTime, tz)
+    int localMonth = month(barTime, tz)
+    int localDay = dayofmonth(barTime, tz)
+    int todayStart = timestamp(tz, localYear, localMonth, localDay, startHour, 0)
+    int previousDayProbe = barTime - 24 * 60 * 60 * 1000
+    barTime >= todayStart ? todayStart : timestamp(tz, year(previousDayProbe, tz), month(previousDayProbe, tz), dayofmonth(previousDayProbe, tz), startHour, 0)
+
+f_smt_shift_local_day_start(int sourceDayStart, int daysBack, string tz, int startHour) =>
+    int shiftedProbe = sourceDayStart - daysBack * 24 * 60 * 60 * 1000
+    timestamp(tz, year(shiftedProbe, tz), month(shiftedProbe, tz), dayofmonth(shiftedProbe, tz), startHour, 0)
+
 px = syminfo.prefix
 oracle_tz = f_oracle_tz(px)
+dayStartHour = f_oracle_day_start_hour(px)
+msDay = 24 * 60 * 60 * 1000
+dayStart = f_smt_local_day_start(time, oracle_tz, dayStartHour)
+dayStartDow = dayofweek(dayStart, oracle_tz)
+weeklyCycleAnchor = f_smt_shift_local_day_start(dayStart, f_days_since_sunday(dayStartDow), oracle_tz, dayStartHour)
 
-// Range keys: each SMT family compares the SAME source candles as its timeframe.
+// Profiler SMT compares the SAME source candles as its HTF panes, not Oracle subranges.
+// Share the existing custom-daily transition; changing this clock must not change AUTO selection.
+const string HTF_CUSTOM_DAILY_TZ = 'America/New_York'
+htf_daily_1800_time = time(timeframe.period, '1800-1801:1234567', HTF_CUSTOM_DAILY_TZ)
+htf_daily_midnight_begins = dayofweek(time, HTF_CUSTOM_DAILY_TZ) != dayofweek(time[1], HTF_CUSTOM_DAILY_TZ)
+htf_daily_1800_begins = not na(htf_daily_1800_time) and na(htf_daily_1800_time[1])
+htf_custom_daily_begin = htf_custom_daily_time == '18:00' ? htf_daily_1800_begins : htf_daily_midnight_begins
+var int smt_custom_daily_key = na
+if na(smt_custom_daily_key) or htf_custom_daily_begin
+    smt_custom_daily_key := time
 val_ses15 = time('15')
 val_ses30 = time('30')
 val_ses90 = time('90')
@@ -116,7 +227,8 @@ val_ses240 = time('240')
 val_sesD = time('360')
 val_ses420 = time('420')
 val_ses720 = time('720')
-val_sesW = time('D')
+smt_regular_daily_key = time('D')
+val_sesW = htf_custom_daily_open and tf_sec <= TF_SEC_60 ? smt_custom_daily_key : smt_regular_daily_key
 val_sesM = time('W')
 val_sesMT = time('M')
 val_sesQ = time('3M')
@@ -168,9 +280,13 @@ f_smt_monthly_tf_render_ok(int rank) =>
     int minTfSec = smt_monthly_min_tf == "1 Hour" ? SMT_TF_SEC_60 : smt_monthly_min_tf == "4 Hour" ? SMT_TF_SEC_240 : smt_monthly_min_tf == "1 Day" ? SMT_TF_SEC_D : 0
     not isMonthlyRank or minTfSec == 0 or tf_sec >= minTfSec
 
+
+
 //==============================================================================
-// Manual asset pairs (set them in the "SMT Asset Pair Settings" group)
+// 4. ASSET CORRELATION BRIDGE (pairs resolved + fetched)
 //==============================================================================
+//==============================================================================
+// GXV AssetCorrelationUtils bridge
 type SmtCorrelationDescriptor
     string symbol
     string displayName
@@ -181,9 +297,10 @@ type SmtCorrelationDescriptor
     float sourceLow
     int sourceTime
 
-const string SMT_INVALID_SECONDARY = "__SMT_INVALID_SECONDARY__"
-const string SMT_INVALID_TERTIARY = "__SMT_INVALID_TERTIARY__"
-const string SMT_INVALID_QUATERNARY = "__SMT_INVALID_QUATERNARY__"
+//==============================================================================
+const string SMT_INVALID_SECONDARY = "__GXV_SMT_INVALID_SECONDARY__"
+const string SMT_INVALID_TERTIARY = "__GXV_SMT_INVALID_TERTIARY__"
+const string SMT_INVALID_QUATERNARY = "__GXV_SMT_INVALID_QUATERNARY__"
 
 f_has_symbol(string s) =>
     str.length(s) > 0
@@ -195,47 +312,69 @@ f_asset_token(string s) =>
 f_same_symbol(string a, string b) =>
     str.upper(a) == str.upper(b) or str.upper(f_asset_token(a)) == str.upper(f_asset_token(b))
 
-f_display_name(string s) =>
-    str.replace_all(f_asset_token(s), "1!", "")
-
-var string csym = ""
-var string tsym3 = ""
-var string qsym4 = ""
-var bool corr_inv1 = false
-var bool corr_inv2 = false
-var bool corr_inv3 = false
-
-if barstate.isfirst
-    bool ok1 = manualPair1On and f_has_symbol(manualPair1) and not f_same_symbol(manualPair1, syminfo.tickerid)
-    bool ok2 = manualPair2On and f_has_symbol(manualPair2) and not f_same_symbol(manualPair2, syminfo.tickerid) and (not ok1 or not f_same_symbol(manualPair2, manualPair1))
-    bool ok3 = manualPair3On and f_has_symbol(manualPair3) and not f_same_symbol(manualPair3, syminfo.tickerid) and (not ok1 or not f_same_symbol(manualPair3, manualPair1)) and (not ok2 or not f_same_symbol(manualPair3, manualPair2))
-    csym := ok1 ? manualPair1 : ""
-    tsym3 := ok2 ? manualPair2 : ""
-    qsym4 := ok3 ? manualPair3 : ""
-    corr_inv1 := ok1 and manualPair1Inverse
-    corr_inv2 := ok2 and manualPair2Inverse
-    corr_inv3 := ok3 and manualPair3Inverse
-
-bool corr_pair1_configured = f_has_symbol(csym) and not f_same_symbol(csym, syminfo.tickerid)
-bool corr_pair2_configured = f_has_symbol(tsym3) and not f_same_symbol(tsym3, syminfo.tickerid)
-bool corr_pair3_configured = f_has_symbol(qsym4) and not f_same_symbol(qsym4, syminfo.tickerid)
+string csym = ""
+string tsym3 = ""
+string qsym4 = ""
+bool corr_base_ok = false
+bool corr_has_tertiary = false
+bool corr_has_quaternary = false
+bool corr_pair1_ok = false
+bool corr_pair2_ok = false
+bool corr_pair3_ok = false
+bool corr_pair1_configured = false
+bool corr_pair2_configured = false
+bool corr_pair3_configured = false
+bool corr_inv1 = false
+bool corr_inv2 = false
+bool corr_inv3 = false
+bool corr_type_pair2 = smt_correlation_type != "Dyad"
+bool corr_type_pair3 = smt_correlation_type == "Tetrad"
+AC.AssetConfig corr_cfg = AC.resolveAssetsByCorrelation(syminfo.ticker, syminfo.tickerid, syminfo.type, syminfo.session, false, smt_correlation_mode, smt_correlation_type)
+corr_base_ok := corr_cfg.detected and f_has_symbol(corr_cfg.secondary) and not f_same_symbol(corr_cfg.secondary, syminfo.tickerid)
+corr_has_tertiary := corr_type_pair2 and corr_base_ok and f_has_symbol(corr_cfg.tertiary) and not f_same_symbol(corr_cfg.tertiary, syminfo.tickerid) and not f_same_symbol(corr_cfg.secondary, corr_cfg.tertiary)
+corr_has_quaternary := corr_type_pair3 and corr_has_tertiary and f_has_symbol(corr_cfg.quaternary) and not f_same_symbol(corr_cfg.quaternary, syminfo.tickerid) and not f_same_symbol(corr_cfg.quaternary, corr_cfg.secondary) and not f_same_symbol(corr_cfg.quaternary, corr_cfg.tertiary)
+csym := corr_base_ok ? corr_cfg.secondary : ""
+tsym3 := corr_has_tertiary ? corr_cfg.tertiary : ""
+qsym4 := corr_has_quaternary ? corr_cfg.quaternary : ""
+corr_inv1 := corr_base_ok ? corr_cfg.invertSecondary : false
+corr_inv2 := corr_has_tertiary ? corr_cfg.invertTertiary : false
+corr_inv3 := corr_has_quaternary ? corr_cfg.invertQuaternary : false
+// Manual legs use the same downstream feeds/ownership as AUTO; blank symbols never request the chart implicitly.
+if manualCorrelation
+    corr_base_ok := manualPair1On and f_has_symbol(manualPair1) and not f_same_symbol(manualPair1, syminfo.tickerid)
+    corr_has_tertiary := manualPair2On and f_has_symbol(manualPair2) and not f_same_symbol(manualPair2, syminfo.tickerid) and (not corr_base_ok or not f_same_symbol(manualPair2, manualPair1))
+    corr_has_quaternary := manualPair3On and f_has_symbol(manualPair3) and not f_same_symbol(manualPair3, syminfo.tickerid) and (not corr_base_ok or not f_same_symbol(manualPair3, manualPair1)) and (not corr_has_tertiary or not f_same_symbol(manualPair3, manualPair2))
+    csym := corr_base_ok ? manualPair1 : ""
+    tsym3 := corr_has_tertiary ? manualPair2 : ""
+    qsym4 := corr_has_quaternary ? manualPair3 : ""
+    corr_inv1 := corr_base_ok and manualPair1Inverse
+    corr_inv2 := corr_has_tertiary and manualPair2Inverse
+    corr_inv3 := corr_has_quaternary and manualPair3Inverse
+corr_pair1_configured := corr_base_ok and f_has_symbol(csym)
+corr_pair2_configured := corr_has_tertiary and f_has_symbol(tsym3)
+corr_pair3_configured := corr_has_quaternary and f_has_symbol(qsym4)
+smtCorrelationPayload() =>
+    [high, low, time, open, close]
 
 string corr_fetch_sym1 = corr_pair1_configured ? csym : SMT_INVALID_SECONDARY
 string corr_fetch_sym2 = corr_pair2_configured ? tsym3 : SMT_INVALID_TERTIARY
 string corr_fetch_sym3 = corr_pair3_configured ? qsym4 : SMT_INVALID_QUATERNARY
-[xh0, xl0, xt0] = request.security(corr_fetch_sym1, tf, [high, low, time], gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_off, ignore_invalid_symbol=true)
-[yh0, yl0, yt0] = request.security(corr_fetch_sym2, tf, [high, low, time], gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_off, ignore_invalid_symbol=true)
-[zh0, zl0, zt0] = request.security(corr_fetch_sym3, tf, [high, low, time], gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_off, ignore_invalid_symbol=true)
-bool corr_pair1_ok = corr_pair1_configured and not na(xh0) and not na(xl0) and not na(xt0)
-bool corr_pair2_ok = corr_pair2_configured and not na(yh0) and not na(yl0) and not na(yt0)
-bool corr_pair3_ok = corr_pair3_configured and not na(zh0) and not na(zl0) and not na(zt0)
-string smt_pair = corr_pair1_configured ? f_display_name(csym) : ""
-string smt_pair2 = corr_pair2_configured ? f_display_name(tsym3) : ""
-string smt_pair3 = corr_pair3_configured ? f_display_name(qsym4) : ""
+[xh0, xl0, xt0, xo0, xc0] = request.security(corr_fetch_sym1, tf, smtCorrelationPayload(), gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_off, ignore_invalid_symbol=true)
+[yh0, yl0, yt0, yo0, yc0] = request.security(corr_fetch_sym2, tf, smtCorrelationPayload(), gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_off, ignore_invalid_symbol=true)
+[zh0, zl0, zt0, zo0, zc0] = request.security(corr_fetch_sym3, tf, [high, low, time, open, close], gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_off, ignore_invalid_symbol=true)
+corr_pair1_ok := corr_pair1_configured and not na(xh0) and not na(xl0) and not na(xt0)
+corr_pair2_ok := corr_pair2_configured and not na(yh0) and not na(yl0) and not na(yt0)
+corr_pair3_ok := corr_pair3_configured and not na(zh0) and not na(zl0) and not na(zt0)
+string smt_pair = corr_pair1_configured ? AC.getAssetTicker(csym) : ""
+string smt_pair2 = corr_pair2_configured ? AC.getAssetTicker(tsym3) : ""
+string smt_pair3 = corr_pair3_configured ? AC.getAssetTicker(qsym4) : ""
 SmtCorrelationDescriptor smt_corr_pair1 = SmtCorrelationDescriptor.new(csym, smt_pair, corr_inv1, corr_pair1_configured, corr_pair1_ok, xh0, xl0, xt0)
 SmtCorrelationDescriptor smt_corr_pair2 = SmtCorrelationDescriptor.new(tsym3, smt_pair2, corr_inv2, corr_pair2_configured, corr_pair2_ok, yh0, yl0, yt0)
 SmtCorrelationDescriptor smt_corr_pair3 = SmtCorrelationDescriptor.new(qsym4, smt_pair3, corr_inv3, corr_pair3_configured, corr_pair3_ok, zh0, zl0, zt0)
 
+//==============================================================================
+// 5. SMT ENGINE (state, sweeps, divergence, lifecycle, arbitration, render)
+//==============================================================================
 //==============================================================================
 // GXV SMT market-state engine
 // DATA -> RANGE -> SWEEP -> DIVERGENCE -> EVENT -> INVALIDATION -> PROJECTION
@@ -340,9 +479,12 @@ f_smt_seed_engine() =>
             array.push(smt_live_slots, SmtLiveSlot.new(false, na, na))
     0
 
-
+// Preserve the Profiler AUTO ladder (15/60/240 vs 30/90/360). New 7H/12H families remain manual.
+profilerSmtMask = QTU.smtEnabledMaskFull(false, effective_sequence_mode, smt_15m_show, smt_30m_show, smt_90m_show, smt_1h_show, smt_4h_show, smt_6h_show, smt_7h_show, smt_12h_show, smt_1d_show, smt_1w_show, smt_1m_show, smt_3m_show, smt_12m_show)
 f_smt_rank_enabled(int rank) =>
-    rank == 1 ? smt_15m_show : rank == 2 ? smt_30m_show : rank == 3 ? smt_1h_show : rank == 4 ? smt_90m_show : rank == 5 ? smt_4h_show : rank == 6 ? smt_6h_show : rank == 7 ? smt_7h_show : rank == 8 ? smt_12h_show : rank == 9 ? smt_1d_show : rank == 10 ? smt_1w_show : rank == 11 ? smt_1m_show : rank == 12 ? smt_3m_show : smt_12m_show
+    bit = rank == 1 ? 1 : rank == 2 ? 2 : rank == 3 ? 8 : rank == 4 ? 4 : rank == 5 ? 16 : rank == 6 ? 32 : rank == 7 ? 2048 : rank == 8 ? 4096 : rank == 9 ? 64 : rank == 10 ? 128 : rank == 11 ? 256 : rank == 12 ? 512 : 1024
+    auto_intraday = effective_sequence_mode == 'GXT Sequence' ? (rank == 2 or rank == 4 or rank == 6) : (rank == 1 or rank == 3 or rank == 5)
+    smt_auto_effective and rank <= 8 ? auto_intraday : QTU.smtMaskHas(profilerSmtMask, bit)
 
 f_smt_pair_enabled(int pairSlot) =>
     pairSlot == 1 ? smt_corr_pair1.configured : pairSlot == 2 ? smt_corr_pair2.configured : pairSlot == 3 ? smt_corr_pair3.configured : false
@@ -360,7 +502,7 @@ f_smt_pair_name_for_slot(int pairSlot) =>
     pairSlot == 1 ? smt_corr_pair1.displayName : pairSlot == 2 ? smt_corr_pair2.displayName : pairSlot == 3 ? smt_corr_pair3.displayName : ""
 
 f_smt_label_text(string shortname, string pairName) =>
-    shortname + "\n" + pairName
+    QTU.smtStackedLabel(shortname, pairName)
 
 f_smt_default_label_text(int rank, int pairSlot) =>
     f_smt_label_text(f_smt_rank_shortname(rank), f_smt_pair_name_for_slot(pairSlot))
@@ -374,7 +516,7 @@ f_smt_labels_for_rank(int rank) =>
     smt_labels_show and not hideAtOrAboveGate
 
 f_smt_event_label_y(int direction, float y1, float y2) =>
-    direction == SMT_DIR_BULL ? math.min(y1, y2) - syminfo.mintick : math.max(y1, y2) + syminfo.mintick
+    QTU.smtLabelPrice(direction, y1, y2, syminfo.mintick)
 
 f_smt_event_label_time(int x1, int x2, int b1, int b2) =>
     int labelBar = int(math.floor((b1 + b2) * 0.5))
@@ -865,8 +1007,9 @@ f_run_smt_cycle(int cycleIdx, bool engineEnabled, int rangeKey, int rank) =>
     f_smt_run_pair(mainState, pair3State, engineEnabled, smt_corr_pair3, rank, 3)
     0
 
+
 //==============================================================================
-// GXV SMT execution
+// 6. SMT EXECUTION (per-bar, run every bar)
 //==============================================================================
 f_smt_seed_engine()
 f_run_smt_cycle(12, tf_ok_12m, val_sesY, 13)
@@ -887,32 +1030,15 @@ f_run_smt_cycle(0, tf_ok_15m, val_ses15, 1)
 f_smt_mark_historical_invalidations()
 f_smt_gc_events()
 
-//==============================================================================
-// Projection (last bar only)
-//==============================================================================
-f_smt_project_events()
+
+//##############################################################################
+// ▲▲ SMT MODULE — END (copy until here), then add section 7 at the END of your script
+//##############################################################################
 
 //==============================================================================
-// Pair status table
+// 7. SMT RUNTIME (put at the very END of your script)
 //==============================================================================
-var table smt_tbl = table.new(position.top_right, 2, 4, bgcolor=color.new(color.black, 100), frame_width=0, border_width=0)
-f_pair_row(int row, SmtCorrelationDescriptor d) =>
-    string nm = d.configured ? d.displayName + (d.inverse ? " (inv)" : "") : "-"
-    string st = not d.configured ? "off" : d.dataReady ? "OK" : "no data"
-    color c = not d.configured ? color.gray : d.dataReady ? color.green : color.red
-    table.cell(smt_tbl, 0, row, nm, text_color=color.gray, text_size=size.small, text_halign=text.align_left)
-    table.cell(smt_tbl, 1, row, st, text_color=c, text_size=size.small, text_halign=text.align_right)
-    0
 if barstate.islast
-    if smt_status_show
-        table.cell(smt_tbl, 0, 0, "SMT pairs", text_color=color.gray, text_size=size.small, text_halign=text.align_left)
-        table.cell(smt_tbl, 1, 0, syminfo.ticker, text_color=color.gray, text_size=size.small, text_halign=text.align_right)
-        f_pair_row(1, smt_corr_pair1)
-        f_pair_row(2, smt_corr_pair2)
-        f_pair_row(3, smt_corr_pair3)
-    else
-        table.clear(smt_tbl, 0, 0, 1, 3)
-
-//----------------
-//--END OF SCRIPT
-//----------------
+    // Standalone: reserve 64 line slots. In a host script use: bin.bin_ln.size() + 64 (as in the original).
+    f_smt_reserve_host_lines(64)
+f_smt_project_events()
